@@ -2531,16 +2531,19 @@ void ProduceItem(rigtorp::MPMCQueue<DY_worktask> &q, double start_time, vector<i
     std::cout<<"ProduceItem Finish";
 }
 
-void ConsumeItem(Graph& graph, int head, DY_worktask &single_task, double start_time){
-    printf("Thread %d START: NO.%d \n", omp_get_thread_num(), head);
+void ConsumeItem(Graph& graph, int thread_idx, int head, DY_worktask &single_task, double start_time){
+    printf("Thread %d START: NO.%d \n", thread_idx, head);
     double theta=0.8;
     vector<double> *inacc_idx_temp;
 
-    if(omp_get_thread_num()==0){
+    if(thread_idx==0){
         inacc_idx_temp=&inacc_idx_1;
     }
-    else if(omp_get_thread_num()==1){
+    else if(thread_idx==1){
         inacc_idx_temp=&inacc_idx_2;
+    } else {
+        //If consumer threads number more than 2, may cause some error, because inacc_idx_temp will not be set.
+        cout<<"inacc_idx_temp hasn't been set!!!"<<endl;
     }
     Agenda_class agenda_worker(graph, config.epsilon, *(inacc_idx_temp));
     // printf("workload size: %d\n",parallel_dynamic_workload.workload.size());
@@ -2597,7 +2600,11 @@ void ConsumeItem(Graph& graph, int head, DY_worktask &single_task, double start_
     }
     double OMP_check_query_time_end = omp_get_wtime();
     // printf("Thread %d :\n", omp_get_thread_num()); 
-    printf("NO.%d Check single query time: %.12f\n", head, OMP_check_query_time_end-OMP_check_query_time);
+    if(single_task.type==DQUERY){
+        printf("NO.%d Check single query time: %.12f\n", head, OMP_check_query_time_end-OMP_check_query_time);
+    } else{
+        printf("NO.%d Check single update time: %.12f\n", head, OMP_check_query_time_end-OMP_check_query_time);
+    }
     printf("NO.%d Check present total time: %.12f\n", head, OMP_check_query_time_end-start_time);
 }
 
@@ -2684,7 +2691,10 @@ void dynamic_ssquery_parallel(Graph& graph){
         const uint64_t numOps = parallel_dynamic_workload.workload.size();
         const uint64_t numConsumers = 2;
         const uint64_t numProducerThreds = 1;
-        rigtorp::MPMCQueue<DY_worktask> q(numConsumers);
+        const uint64_t queueLength = 10;
+        std::mutex pop_queue_mtx;
+        std::mutex will_update_mtx;
+        rigtorp::MPMCQueue<DY_worktask> q(queueLength);
         std::atomic<bool> flag(false);
         std::vector<std::thread> threads;
         //Producer
@@ -2703,10 +2713,26 @@ void dynamic_ssquery_parallel(Graph& graph){
             ;
             // thread_set.insert(std::this_thread::get_id());
             for (auto j = i; j < numOps; j += numConsumers) {
-            DY_worktask single_task;
-            q.pop(single_task);
-            std::cout << "Consumer thread " << std::this_thread::get_id()<< " is consuming the " << i << "^th item." << std::endl;
-            ConsumeItem(graph, j, single_task, OMP_check_total_time_start);
+                pop_queue_mtx.lock();
+                will_update_mtx.lock();
+                DY_worktask single_task;
+                q.pop(single_task);
+                if(single_task.type == DQUERY){
+                    will_update_mtx.unlock();
+                    pop_queue_mtx.unlock();
+                }
+                string task_type;
+                if (single_task.type==DQUERY){
+                    task_type = "QUERY";
+                }else {
+                    task_type = "UPDATE";
+                }
+                std::cout << "Consumer thread " << std::this_thread::get_id()<< " is consuming the " << j << "^th item doing " << task_type <<"." << std::endl;
+                ConsumeItem(graph, i, j, single_task, OMP_check_total_time_start);
+                if(single_task.type == DUPDATE){
+                    will_update_mtx.unlock();
+                    pop_queue_mtx.unlock();
+                }
             }
 
         }));
