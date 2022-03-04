@@ -132,9 +132,6 @@ struct System_status{
     int is_updating;
     int is_query;
     omp_nest_lock_t lck;
-    omp_nest_lock_t read_mtx;
-    omp_nest_lock_t write_mtx;
-    int readCnt;
 } parallel_system_status;
 
 bool query_flag;

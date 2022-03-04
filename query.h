@@ -2513,16 +2513,16 @@ void generate_parallel_dynamic_workload_workspace(bool if_hybrid=false){
 
 void ProduceItem(rigtorp::MPMCQueue<DY_worktask> &q, double start_time, vector<int> &queries, vector<pair<int,int>> &updates) {
     double current_time;
+    DY_worktask single_task;
     for (int i=0; i<parallel_dynamic_workload.workload.size(); ) {
         current_time=omp_get_wtime();
-        // printf("check query time: %.5f, check current time: %.5f\n", parallel_dynamic_workload.time[head_workload], current_time-start_time);
         if(parallel_dynamic_workload.time[i]<=current_time-start_time){
             //push it to workspace
             if(parallel_dynamic_workload.workload[i]==DUPDATE){
-                DY_worktask single_task = {.type = DUPDATE, .update_start=updates[i].first, .update_end=updates[i].second};
+                single_task = {.type = DUPDATE, .update_start=updates[i].first, .update_end=updates[i].second};
                 q.push(single_task);
             } else{
-                DY_worktask single_task = {.type = DQUERY, .source = queries[i]};
+                single_task = {.type = DQUERY, .source = queries[i]};
                 q.push(single_task);
             }
             i++;
@@ -2531,7 +2531,7 @@ void ProduceItem(rigtorp::MPMCQueue<DY_worktask> &q, double start_time, vector<i
     std::cout<<"ProduceItem Finish";
 }
 
-void ConsumeItem(Graph& graph, int thread_idx, int head, DY_worktask &single_task, double start_time){
+void ConsumeItem(Graph& graph, int thread_idx, int head, const DY_worktask &single_task, double start_time){
     printf("Thread %d START: NO.%d \n", thread_idx, head);
     double theta=0.8;
     vector<double> *inacc_idx_temp;
@@ -2551,7 +2551,6 @@ void ConsumeItem(Graph& graph, int thread_idx, int head, DY_worktask &single_tas
 
     if(single_task.type==DUPDATE) {
         //write mutex
-        omp_set_nest_lock(&parallel_system_status.write_mtx);
         int u,v;
         cout<< "UPDATE"<<endl;	
         u=single_task.update_start;
@@ -2582,28 +2581,16 @@ void ConsumeItem(Graph& graph, int thread_idx, int head, DY_worktask &single_tas
             }
         }
         cout<< "UPDATE Finish"<<endl;	
-        omp_unset_nest_lock(&parallel_system_status.write_mtx);
     } else if (single_task.type==DQUERY) {
-        //read mutex
-        omp_set_nest_lock(&parallel_system_status.read_mtx);
-        if (++parallel_system_status.readCnt == 1) {
-            omp_set_nest_lock(&parallel_system_status.write_mtx);
-        }
-        omp_unset_nest_lock(&parallel_system_status.read_mtx);
         agenda_worker.Agenda_query_lazy_dynamic_CLASS(single_task.source, theta);
         cout<< "QUERY Finish"<<endl;
-        omp_set_nest_lock(&parallel_system_status.read_mtx);
-        if (--parallel_system_status.readCnt == 0) {
-            omp_unset_nest_lock(&parallel_system_status.write_mtx);
-        }
-        omp_unset_nest_lock(&parallel_system_status.read_mtx);
     }
     double OMP_check_query_time_end = omp_get_wtime();
     // printf("Thread %d :\n", omp_get_thread_num()); 
     if(single_task.type==DQUERY){
-        printf("NO.%d Check single query time: %.12f\n", head, OMP_check_query_time_end-OMP_check_query_time);
+        printf("NO.%d item, thread %d: Check single query time: %.12f\n", head, thread_idx,OMP_check_query_time_end-OMP_check_query_time);
     } else{
-        printf("NO.%d Check single update time: %.12f\n", head, OMP_check_query_time_end-OMP_check_query_time);
+        printf("NO.%d item, thread %d: Check single update time: %.12f\n", head, thread_idx,OMP_check_query_time_end-OMP_check_query_time);
     }
     printf("NO.%d Check present total time: %.12f\n", head, OMP_check_query_time_end-start_time);
 }
@@ -2683,17 +2670,17 @@ void dynamic_ssquery_parallel(Graph& graph){
         /*
         PARALLEL PART
         */
-        omp_init_nest_lock(&parallel_system_status.read_mtx);
-        omp_init_nest_lock(&parallel_system_status.write_mtx);
-        parallel_system_status.readCnt = 0;
         double OMP_check_total_time_start = omp_get_wtime();
 
         const uint64_t numOps = parallel_dynamic_workload.workload.size();
-        const uint64_t numConsumers = 2;
+        const uint64_t numConsumers = 1;
         const uint64_t numProducerThreds = 1;
         const uint64_t queueLength = 10;
         std::mutex pop_queue_mtx;
-        std::mutex will_update_mtx;
+        std::mutex write_mtx;
+        std::mutex read_mtx;
+        uint64_t readCnt = 0;
+        uint64_t popCnt = 0;
         rigtorp::MPMCQueue<DY_worktask> q(queueLength);
         std::atomic<bool> flag(false);
         std::vector<std::thread> threads;
@@ -2712,26 +2699,39 @@ void dynamic_ssquery_parallel(Graph& graph){
             while (!flag)
             ;
             // thread_set.insert(std::this_thread::get_id());
+            int temp_pop_cnt;
+            DY_worktask single_task;
+            string task_type;
             for (auto j = i; j < numOps; j += numConsumers) {
                 pop_queue_mtx.lock();
-                will_update_mtx.lock();
-                DY_worktask single_task;
                 q.pop(single_task);
+                temp_pop_cnt = popCnt;
+                popCnt++;
                 if(single_task.type == DQUERY){
-                    will_update_mtx.unlock();
-                    pop_queue_mtx.unlock();
+                    read_mtx.lock();
+                    if (++readCnt==1){
+                        write_mtx.lock();
+                    }
+                    read_mtx.unlock();
+                } else if(single_task.type == DUPDATE) {
+                    write_mtx.lock();
                 }
-                string task_type;
+                pop_queue_mtx.unlock();
                 if (single_task.type==DQUERY){
                     task_type = "QUERY";
                 }else {
                     task_type = "UPDATE";
                 }
-                std::cout << "Consumer thread " << std::this_thread::get_id()<< " is consuming the " << j << "^th item doing " << task_type <<"." << std::endl;
-                ConsumeItem(graph, i, j, single_task, OMP_check_total_time_start);
-                if(single_task.type == DUPDATE){
-                    will_update_mtx.unlock();
-                    pop_queue_mtx.unlock();
+                std::cout << "Consumer thread " << i<<": "<< std::this_thread::get_id()<< " is consuming the " << temp_pop_cnt << "^th item doing " << task_type <<"." << std::endl;
+                ConsumeItem(graph, i, temp_pop_cnt, single_task, OMP_check_total_time_start);
+                if(single_task.type == DQUERY){
+                    read_mtx.lock();
+                    if (--readCnt==0){
+                        write_mtx.unlock();
+                    }
+                    read_mtx.unlock();
+                } else if(single_task.type == DUPDATE) {
+                    write_mtx.unlock();
                 }
             }
 
