@@ -426,7 +426,7 @@ int main(int argc, char *argv[]) {
 		dynamic_ssquery_parallel(graph);
 		double OMP_total_end_time=omp_get_wtime();
 		printf("OMP CHECK TOTAL TIME%.12f\n", OMP_total_end_time-OMP_total_start_time);
-		cout << "Memory usage (MB):" << get_proc_memory()/1000.0 << endl << endl; 
+		cout << "Memory usage (MB):" << get_proc_memory()/1000.0 << endl << endl;
     }
 	else if(config.action == DYNAMIC_TOPK){
 		config.graph_location = config.get_graph_folder();
