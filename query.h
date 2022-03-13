@@ -2545,6 +2545,7 @@ void ConsumeItem(Graph& graph, int thread_idx, int head, const DY_worktask &sing
         //If consumer threads number more than 2, may cause some error, because inacc_idx_temp will not be set.
         cout<<"inacc_idx_temp hasn't been set!!!"<<endl;
     }
+    cout<<"Vector Finished"<<endl;
     Agenda_class agenda_worker(graph, config.epsilon, *(inacc_idx_temp));
     // printf("workload size: %d\n",parallel_dynamic_workload.workload.size());
     double OMP_check_query_time = omp_get_wtime();//OMP_TIME_START
@@ -2552,7 +2553,7 @@ void ConsumeItem(Graph& graph, int thread_idx, int head, const DY_worktask &sing
     if(single_task.type==DUPDATE) {
         //write mutex
         int u,v;
-        cout<< "UPDATE"<<endl;	
+        cout<< "Doing UPDATE"<<endl;	
         u=single_task.update_start;
         v=single_task.update_end;
         
@@ -2582,6 +2583,7 @@ void ConsumeItem(Graph& graph, int thread_idx, int head, const DY_worktask &sing
         }
         cout<< "UPDATE Finish"<<endl;	
     } else if (single_task.type==DQUERY) {
+        cout<< "Doing Query"<<endl;	
         agenda_worker.Agenda_query_lazy_dynamic_CLASS(single_task.source, theta);
         cout<< "QUERY Finish"<<endl;
     }
@@ -2673,7 +2675,7 @@ void dynamic_ssquery_parallel(Graph& graph){
         double OMP_check_total_time_start = omp_get_wtime();
 
         const uint64_t numOps = parallel_dynamic_workload.workload.size();
-        const uint64_t numConsumers = 1;
+        const uint64_t numConsumers = 2;
         const uint64_t numProducerThreds = 1;
         const uint64_t queueLength = 10;
         std::mutex pop_queue_mtx;
