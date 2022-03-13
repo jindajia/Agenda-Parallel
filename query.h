@@ -2511,7 +2511,11 @@ void generate_parallel_dynamic_workload_workspace(bool if_hybrid=false){
 }
 //-------------------------------------------------------------------------------------------------------------------------------------------------
 
-void ProduceItem(rigtorp::MPMCQueue<DY_worktask> &q, double start_time, vector<int> &queries, vector<pair<int,int>> &updates) {
+void ProduceItem(rigtorp::MPMCQueue<DY_worktask> &q, double start_time, vector<int> &queries, vector<pair<int,int>> &updates, int graph_n) {
+    response_time_start.reserve(graph_n);
+    response_time_wait.reserve(graph_n);
+    response_time_end.reserve(graph_n);
+
     double current_time;
     DY_worktask single_task;
     for (int i=0; i<parallel_dynamic_workload.workload.size(); ) {
@@ -2519,10 +2523,12 @@ void ProduceItem(rigtorp::MPMCQueue<DY_worktask> &q, double start_time, vector<i
         if(parallel_dynamic_workload.time[i]<=current_time-start_time){
             //push it to workspace
             if(parallel_dynamic_workload.workload[i]==DUPDATE){
-                single_task = {.type = DUPDATE, .update_start=updates[i].first, .update_end=updates[i].second};
+                single_task = {.type = DUPDATE, .source = -1, .update_start=updates[i].first, .update_end=updates[i].second};
                 q.push(single_task);
             } else{
-                single_task = {.type = DQUERY, .source = queries[i]};
+                query_queue.push_back(queries[i]);
+                response_time_start[queries[i]]=current_time;
+                single_task = {.type = DQUERY, .source = queries[i] , .update_start=-1, .update_end=-1};
                 q.push(single_task);
             }
             i++;
@@ -2531,11 +2537,12 @@ void ProduceItem(rigtorp::MPMCQueue<DY_worktask> &q, double start_time, vector<i
     std::cout<<"ProduceItem Finish";
 }
 
-void ConsumeItem(Graph& graph, int thread_idx, int head, const DY_worktask &single_task, double start_time){
+void ConsumeItem(Graph& graph, int thread_idx, int head, const DY_worktask &single_task, double start_time, int this_worker_number, int total_worker_number){
     printf("Thread %d START: NO.%d \n", thread_idx, head);
     double theta=0.8;
+    /*
     vector<double> *inacc_idx_temp;
-
+    
     if(thread_idx==0){
         inacc_idx_temp=&inacc_idx_1;
     }
@@ -2545,8 +2552,8 @@ void ConsumeItem(Graph& graph, int thread_idx, int head, const DY_worktask &sing
         //If consumer threads number more than 2, may cause some error, because inacc_idx_temp will not be set.
         cout<<"inacc_idx_temp hasn't been set!!!"<<endl;
     }
-    cout<<"Vector Finished"<<endl;
-    Agenda_class agenda_worker(graph, config.epsilon, *(inacc_idx_temp));
+    */
+    Agenda_class agenda_worker(graph, config.epsilon, this_worker_number);
     // printf("workload size: %d\n",parallel_dynamic_workload.workload.size());
     double OMP_check_query_time = omp_get_wtime();//OMP_TIME_START
 
@@ -2576,15 +2583,17 @@ void ConsumeItem(Graph& graph, int thread_idx, int head, const DY_worktask &sing
                 for(long j=0; j<reverse_idx.first.occur.m_num; j++){
                     long id = reverse_idx.first.occur[j];
                     double pmin=min((reverse_idx.first[id]+errorlimit*epsrate)*(1-config.alpha)/config.alpha,1.0);
-                    inacc_idx_1[id]*=(1-pmin/graph.g[u].size());
-                    inacc_idx_2[id]*=(1-pmin/graph.g[u].size());
+                    for(int k=0; k<total_worker_number; k++){
+                        inacc_idx_all[k][id]*=(1-pmin/graph.g[u].size());
+                    }
                 }
             }
         }
         cout<< "UPDATE Finish"<<endl;	
     } else if (single_task.type==DQUERY) {
-        cout<< "Doing Query"<<endl;	
+        response_time_wait[single_task.source]=omp_get_wtime();
         agenda_worker.Agenda_query_lazy_dynamic_CLASS(single_task.source, theta);
+        response_time_end[single_task.source]=omp_get_wtime();
         cout<< "QUERY Finish"<<endl;
     }
     double OMP_check_query_time_end = omp_get_wtime();
@@ -2637,7 +2646,7 @@ void dynamic_workload_management(double start_time, vector<int> &queries, vector
     parallel_system_status.is_END=1;
 }
 
-void dynamic_ssquery_parallel(Graph& graph){
+void dynamic_ssquery_parallel(Graph& graph, int num_total_worker){
 	vector<int> queries;
     load_ss_query(queries);
     INFO(queries.size());
@@ -2662,12 +2671,14 @@ void dynamic_ssquery_parallel(Graph& graph){
 		
         reverse_idx.first.initialize(graph.n);
         reverse_idx.second.initialize(graph.n);
+        /*
 		inacc_idx_1.reserve(graph.n);
 		inacc_idx_1.assign(graph.n, 1);
 		inacc_idx_2.reserve(graph.n);
 		inacc_idx_2.assign(graph.n, 1);
-		
-		
+		*/
+		inacc_idx_all.resize(num_total_worker);                           // resize the columns
+        for (auto &row : inacc_idx_all) { row.resize(graph.n); row.assign(graph.n, 1); }
 
         /*
         PARALLEL PART
@@ -2675,7 +2686,7 @@ void dynamic_ssquery_parallel(Graph& graph){
         double OMP_check_total_time_start = omp_get_wtime();
 
         const uint64_t numOps = parallel_dynamic_workload.workload.size();
-        const uint64_t numConsumers = 2;
+        const uint64_t numConsumers = num_total_worker;
         const uint64_t numProducerThreds = 1;
         const uint64_t queueLength = 10;
         std::mutex pop_queue_mtx;
@@ -2691,7 +2702,7 @@ void dynamic_ssquery_parallel(Graph& graph){
         threads.push_back(std::thread([&, i] {
             while (!flag)
             ;
-            ProduceItem(q, OMP_check_total_time_start, queries, updates);
+            ProduceItem(q, OMP_check_total_time_start, queries, updates, graph.n);
         }));
         }
 
@@ -2725,7 +2736,7 @@ void dynamic_ssquery_parallel(Graph& graph){
                     task_type = "UPDATE";
                 }
                 std::cout << "Consumer thread " << i<<": "<< std::this_thread::get_id()<< " is consuming the " << temp_pop_cnt << "^th item doing " << task_type <<"." << std::endl;
-                ConsumeItem(graph, i, temp_pop_cnt, single_task, OMP_check_total_time_start);
+                ConsumeItem(graph, i, temp_pop_cnt, single_task, OMP_check_total_time_start, i, numConsumers);
                 if(single_task.type == DQUERY){
                     read_mtx.lock();
                     if (--readCnt==0){
@@ -2745,6 +2756,21 @@ void dynamic_ssquery_parallel(Graph& graph){
         }
 		double OMP_check_total_time_end = omp_get_wtime();
         printf("Check total query time: %.12f\n", OMP_check_total_time_end-OMP_check_total_time_start);
+        printf("----------------------------------------------------------------------\n");
+        double total_response_time=0;
+        double total_wait_time=0;
+        for (auto &query_num: query_queue){
+            printf("query_num: %d\n", query_num);
+            printf("start_time: %.6f\n", response_time_start[query_num]-OMP_check_total_time_start);
+            printf("wait_time: %.6f\n", response_time_wait[query_num]-response_time_start[query_num]);
+            printf("response_time: %.6f\n", response_time_end[query_num]-response_time_start[query_num]);
+            total_wait_time+=response_time_wait[query_num]-response_time_start[query_num];
+            total_response_time+=response_time_end[query_num]-response_time_start[query_num];
+            printf("################\n");
+        }
+        printf("total wait time: %.6f\n", total_wait_time);
+        printf("total response time: %.6f\n", total_response_time);
+        printf("----------------------------------------------------------------------\n");
     }
 
 }

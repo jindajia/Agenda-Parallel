@@ -40,6 +40,13 @@ ReversePushidx reverse_idx;
 vector<double> inacc_idx;
 vector<double> inacc_idx_1;
 vector<double> inacc_idx_2;
+vector<vector<double>> inacc_idx_all;
+
+vector<int> query_queue;
+vector<double> response_time_start;
+vector<double> response_time_wait;
+vector<double> response_time_end;
+
 iMap<int> reuse_idx;
 vector<int> reuse_idx_vector;
 iMap<double> ppr_rw;
