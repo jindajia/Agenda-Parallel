@@ -2704,8 +2704,12 @@ void dynamic_ssquery_parallel(Graph& graph){
             int temp_pop_cnt;
             DY_worktask single_task;
             string task_type;
-            for (auto j = i; j < numOps; j += numConsumers) {
+            while (true) {
                 pop_queue_mtx.lock();
+                if (popCnt>=numOps) {
+                    pop_queue_mtx.unlock();
+                    break;
+                }
                 q.pop(single_task);
                 temp_pop_cnt = popCnt;
                 popCnt++;
