@@ -158,7 +158,7 @@ public:
 
 	
 	    while(errsum>errbound){
-	    	update_idx(graph,error_idx[i].first);
+	    	update_idx_forParallel(graph,error_idx[i].first, this_worker_number);
 	    	inacc_idx_all[this_worker_number][error_idx[i].first]=1;
 	    	errsum-=error_idx[i].second;
 	    	i++;
@@ -209,7 +209,7 @@ public:
                         for(unsigned long k=0; k<rw_idx_info[source].second; k++){
                             int des;
                             if(config.alter_idx == 0)
-                                des = rw_idx[rw_idx_info[source].first + k];
+                                des = rw_idx_all[this_worker_number][rw_idx_info[source].first + k];
                             else
                                 des = rw_idx_alter[rw_idx_info[source].first + k].back();
                             ppr[des] += ppr_incre;
@@ -224,7 +224,7 @@ public:
                         for(unsigned long k=0; k<num_s_rw; k++){
                             int des;
                             if(config.alter_idx == 0)
-                                des = rw_idx[rw_idx_info[source].first + k];
+                                des = rw_idx_all[this_worker_number][rw_idx_info[source].first + k];
                             else
                                 des = rw_idx_alter[rw_idx_info[source].first + k].back();
                             ppr[des] += ppr_incre;

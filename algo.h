@@ -60,9 +60,13 @@ iMap<int> rw_counter;
 atomic<unsigned long long> num_hit_idx;
 atomic<unsigned long long> num_total_rw;
 long num_iter_topk;
+
 vector<int> rw_idx;
+vector<vector<int>> rw_idx_all;
+
 vector<vector<int>> rw_idx_alter;
 vector< pair<unsigned long long, unsigned long> > rw_idx_info;
+
 vector<int> rw_idx_fora;
 vector< pair<unsigned long long, unsigned long> > rw_idx_info_fora;
 vector<int> rw_idx_baton;

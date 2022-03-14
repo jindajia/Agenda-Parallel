@@ -2456,7 +2456,10 @@ void generate_parallel_dynamic_workload_workspace(bool if_hybrid=false){
 	parallel_dynamic_workload.workload.resize(query_size+update_size);
     parallel_dynamic_workload.time.resize(query_size+update_size);
 	parallel_dynamic_workload.workload.assign(query_size+update_size,DQUERY);
-	parallel_dynamic_workload.workload[0]=DUPDATE;
+	
+    //-------------original--------------------------------------
+    
+    parallel_dynamic_workload.workload[0]=DUPDATE;
 	for(int i=1; i<update_size; ){
 		int n = rand()%(query_size+update_size);
 		if(parallel_dynamic_workload.workload[n]!=DUPDATE){
@@ -2464,6 +2467,26 @@ void generate_parallel_dynamic_workload_workspace(bool if_hybrid=false){
 			parallel_dynamic_workload.workload[n]=DUPDATE;
 		}
 	}
+    
+    //------------update first-------------------------------------
+    /*
+    for(int i=0; i<update_size; ){
+		if(parallel_dynamic_workload.workload[i]!=DUPDATE){
+			i++;
+			parallel_dynamic_workload.workload[i]=DUPDATE;
+		}
+	}
+    */
+    //------------query first-------------------------------------
+    /*
+    for(int i=0; i<update_size; ){
+		if(parallel_dynamic_workload.workload[query_size+update_size-i-1]!=DUPDATE){
+			i++;
+			parallel_dynamic_workload.workload[query_size+update_size-i-1]=DUPDATE;
+		}
+	}
+    */
+    //------------------------------------------------------------
     parallel_dynamic_workload.time[0]=1;
     for(int i=1; i<query_size+update_size; i++){
         parallel_dynamic_workload.time[i]=parallel_dynamic_workload.time[i-1]+0.2;
@@ -2560,7 +2583,7 @@ void ConsumeItem(Graph& graph, int thread_idx, int head, const DY_worktask &sing
     if(single_task.type==DUPDATE) {
         //write mutex
         int u,v;
-        cout<< "Doing UPDATE"<<endl;	
+        cout<< "UPDATE"<<endl;	
         u=single_task.update_start;
         v=single_task.update_end;
         

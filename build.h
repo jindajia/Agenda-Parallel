@@ -272,10 +272,49 @@ inline string get_idx_info_name(){
 inline void deserialize_idx(){
     string file_name = get_idx_file_name();
     assert_file_exist("index file", file_name);
+    cout << "index file name: " << file_name << endl;
     std::ifstream ifs(file_name);
     boost::archive::binary_iarchive ia(ifs);
-    if(config.alter_idx == 0)
+    if(config.alter_idx == 0){
+        printf("start input index\n");
         ia >> rw_idx;
+    }
+    else 
+        ia >> rw_idx_alter;
+
+    file_name = get_idx_info_name();
+    assert_file_exist("index file", file_name);
+    std::ifstream info_ifs(file_name);
+    boost::archive::binary_iarchive info_ia(info_ifs);
+    info_ia >> rw_idx_info;
+}
+
+
+inline void deserialize_idx_forParallel(int total_worker_num){
+    string file_name = get_idx_file_name();
+    assert_file_exist("index file", file_name);
+    cout << "index file name: " << file_name << endl;
+    std::ifstream ifs(file_name);
+    boost::archive::binary_iarchive ia(ifs);
+    rw_idx_all.resize(total_worker_num);   
+    if(config.alter_idx == 0){
+        printf("start input index\n");
+        ia >> rw_idx;
+        printf("check idx size: %d\n", rw_idx.size());
+        for (auto &row : rw_idx_all) { row.resize(rw_idx.size()); row.assign(rw_idx.size(), 1); }
+
+        for(int i=0; i<total_worker_num; i++){
+            printf("pushing for worker %d\n", i);
+            for(int j=0; j<rw_idx.size(); j++){
+                rw_idx_all[i][j]=rw_idx[j];
+            }
+        }
+        for(int i=0; i<total_worker_num; i++){
+            printf("check address of idx: %d\n", rw_idx_all[i]);
+        }
+        printf("check idx size: %d\n", rw_idx_all[0].size());
+        printf("finish input index\n");
+    }
     else 
         ia >> rw_idx_alter;
 
@@ -726,7 +765,18 @@ void update_idx(const Graph& graph, int source){
 		// rw_idx[source].push_back(destination);
 		rw_idx[begin_idx+i]=destination;
 	}
-    
+}
+
+void update_idx_forParallel(const Graph& graph, int source, int this_worker_number){
+	unsigned long num_rw = rw_idx_info[source].second;
+	//if(config.with_baton == true)
+		//num_rw = ceil(graph.g[source].size()*config.beta/config.alpha);
+	unsigned long begin_idx = rw_idx_info[source].first;
+	for(unsigned long i=0; i<num_rw; i++){ //for each node, do some rand-walks
+		unsigned long destination = random_walk(source, graph);
+		// rw_idx[source].push_back(destination);
+		rw_idx_all[this_worker_number][begin_idx+i]=destination;
+	}
 }
 
 void remove_edge(Graph& graph, int u, int v){
