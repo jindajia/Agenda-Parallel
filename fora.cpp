@@ -419,14 +419,15 @@ int main(int argc, char *argv[]) {
 			set_optimal_beta(config,graph);
 			rebuild_idx(graph);
 		}
-        omp_set_num_threads(2);
-        int total_procs = omp_get_num_procs();
-		printf("total_cores= %d\n", total_procs);
 
-		dynamic_ssquery_parallel(graph);
+        cout<<"Please input the number of worker threads"<<endl;
+		int num_total_worker;
+        cin>>num_total_worker;
+
+		dynamic_ssquery_parallel(graph, num_total_worker);
 		double OMP_total_end_time=omp_get_wtime();
 		printf("OMP CHECK TOTAL TIME%.12f\n", OMP_total_end_time-OMP_total_start_time);
-		cout << "Memory usage (MB):" << get_proc_memory()/1000.0 << endl << endl;
+		cout << "Memory usage (MB):" << get_proc_memory()/1000.0 << endl << endl; 
     }
 	else if(config.action == DYNAMIC_TOPK){
 		config.graph_location = config.get_graph_folder();

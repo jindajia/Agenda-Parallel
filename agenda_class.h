@@ -45,11 +45,12 @@ private:
     Graph &graph;
     double epsilon;
     double omega;
-    vector<double> &inacc_idx;
+    //vector<double> &inacc_idx;
+    int this_worker_number;
 
 //----------------voids------------------------------
 public:
-    Agenda_class(Graph &_graph, double _epsilon, vector<double> &_inacc_idx): graph(_graph), epsilon(_epsilon), inacc_idx(_inacc_idx)
+    Agenda_class(Graph &_graph, double _epsilon, int _this_worker_number): graph(_graph), epsilon(_epsilon), this_worker_number(_this_worker_number)
     {
         init();
     }
@@ -140,12 +141,12 @@ public:
             int node_id = fwd_idx.first.occur[i];
             double reserve = fwd_idx.first[ node_id ];
 	    	double residue = fwd_idx.second[ node_id ];
-	    	if(residue*(1-inacc_idx[node_id])>0){
+	    	if(residue*(1-inacc_idx_all[this_worker_number][node_id])>0){
 	    		//error_idx.push_back(make_pair(node_id,residue*(1-inacc_idx[node_id])));
 	    		//printf("check omp i: %d\n", i);
-	    		error_idx[i] = make_pair(node_id, residue*(1 - inacc_idx[node_id]));
+	    		error_idx[i] = make_pair(node_id, residue*(1 - inacc_idx_all[this_worker_number][node_id]));
 	    		rsum+=residue;
-	    		errsum+=residue*(1-inacc_idx[node_id]);
+	    		errsum+=residue*(1-inacc_idx_all[this_worker_number][node_id]);
 	    	}
         }
 	    double OMP_end_time = omp_get_wtime();
@@ -158,7 +159,7 @@ public:
 	
 	    while(errsum>errbound){
 	    	update_idx(graph,error_idx[i].first);
-	    	inacc_idx[error_idx[i].first]=1;
+	    	inacc_idx_all[this_worker_number][error_idx[i].first]=1;
 	    	errsum-=error_idx[i].second;
 	    	i++;
 	    }
