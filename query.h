@@ -2749,7 +2749,7 @@ void dynamic_ssquery_parallel(Graph& graph, int num_total_worker){
         const uint64_t numOps = parallel_dynamic_workload.workload.size();
         const uint64_t numConsumers = num_total_worker;
         const uint64_t numProducerThreds = 1;
-        const uint64_t queueLength = 10;
+        const uint64_t queueLength = max((uint64_t)20, numOps/2);
         std::mutex main_queue_mtx;
         std::mutex update_queue_mtx;
         std::mutex query_queue_mtx;
