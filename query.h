@@ -2456,7 +2456,10 @@ void generate_parallel_dynamic_workload_workspace(bool if_hybrid=false){
 	parallel_dynamic_workload.workload.resize(query_size+update_size);
     parallel_dynamic_workload.time.resize(query_size+update_size);
 	parallel_dynamic_workload.workload.assign(query_size+update_size,DQUERY);
-	parallel_dynamic_workload.workload[0]=DUPDATE;
+	
+    //-------------original--------------------------------------
+    
+    parallel_dynamic_workload.workload[0]=DUPDATE;
 	for(int i=1; i<update_size; ){
 		int n = rand()%(query_size+update_size);
 		if(parallel_dynamic_workload.workload[n]!=DUPDATE){
@@ -2464,6 +2467,26 @@ void generate_parallel_dynamic_workload_workspace(bool if_hybrid=false){
 			parallel_dynamic_workload.workload[n]=DUPDATE;
 		}
 	}
+    
+    //------------update first-------------------------------------
+    /*
+    for(int i=0; i<update_size; ){
+		if(parallel_dynamic_workload.workload[i]!=DUPDATE){
+			i++;
+			parallel_dynamic_workload.workload[i]=DUPDATE;
+		}
+	}
+    */
+    //------------query first-------------------------------------
+    /*
+    for(int i=0; i<update_size; ){
+		if(parallel_dynamic_workload.workload[query_size+update_size-i-1]!=DUPDATE){
+			i++;
+			parallel_dynamic_workload.workload[query_size+update_size-i-1]=DUPDATE;
+		}
+	}
+    */
+    //------------------------------------------------------------
     parallel_dynamic_workload.time[0]=1;
     for(int i=1; i<query_size+update_size; i++){
         parallel_dynamic_workload.time[i]=parallel_dynamic_workload.time[i-1]+0.2;
@@ -2518,18 +2541,22 @@ void ProduceItem(rigtorp::MPMCQueue<DY_worktask> &q, double start_time, vector<i
 
     double current_time;
     DY_worktask single_task;
+    int update_idx = 0;
+    int query_idx = 0;
     for (int i=0; i<parallel_dynamic_workload.workload.size(); ) {
         current_time=omp_get_wtime();
         if(parallel_dynamic_workload.time[i]<=current_time-start_time){
             //push it to workspace
             if(parallel_dynamic_workload.workload[i]==DUPDATE){
-                single_task = {.type = DUPDATE, .source = -1, .update_start=updates[i].first, .update_end=updates[i].second};
+                single_task = {.type = DUPDATE, .source = -1, .update_start=updates[update_idx].first, .update_end=updates[update_idx].second};
                 q.push(single_task);
+                update_idx++;
             } else{
-                query_queue.push_back(queries[i]);
-                response_time_start[queries[i]]=current_time;
-                single_task = {.type = DQUERY, .source = queries[i] , .update_start=-1, .update_end=-1};
+                query_queue.push_back(queries[query_idx]);
+                response_time_start[queries[query_idx]]=current_time;
+                single_task = {.type = DQUERY, .source = queries[query_idx] , .update_start=-1, .update_end=-1};
                 q.push(single_task);
+                query_idx++;
             }
             i++;
         }
@@ -2560,7 +2587,7 @@ void ConsumeItem(Graph& graph, int thread_idx, int head, const DY_worktask &sing
     if(single_task.type==DUPDATE) {
         //write mutex
         int u,v;
-        cout<< "Doing UPDATE"<<endl;	
+        cout<< "UPDATE"<<endl;	
         u=single_task.update_start;
         v=single_task.update_end;
         

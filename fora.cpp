@@ -406,9 +406,13 @@ int main(int argc, char *argv[]) {
    
         INFO("finished initing parameters");
         INFO(graph.n, graph.m);
-		
+
+		cout<<"Please input the number of worker threads"<<endl;
+		int num_total_worker;
+        cin>>num_total_worker;
+
 		if(config.with_rw_idx&&!config.exact)
-            deserialize_idx();
+            deserialize_idx_forParallel(num_total_worker);
 		
         cout<<"deserialize completed"<<endl;
 		
@@ -420,14 +424,13 @@ int main(int argc, char *argv[]) {
 			rebuild_idx(graph);
 		}
 
-        cout<<"Please input the number of worker threads"<<endl;
-		int num_total_worker;
-        cin>>num_total_worker;
+        
 
 		dynamic_ssquery_parallel(graph, num_total_worker);
 		double OMP_total_end_time=omp_get_wtime();
 		printf("OMP CHECK TOTAL TIME%.12f\n", OMP_total_end_time-OMP_total_start_time);
 		cout << "Memory usage (MB):" << get_proc_memory()/1000.0 << endl << endl; 
+        
     }
 	else if(config.action == DYNAMIC_TOPK){
 		config.graph_location = config.get_graph_folder();
