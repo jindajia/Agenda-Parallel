@@ -2541,18 +2541,22 @@ void ProduceItem(rigtorp::MPMCQueue<DY_worktask> &q, double start_time, vector<i
 
     double current_time;
     DY_worktask single_task;
+    int update_idx = 0;
+    int query_idx = 0;
     for (int i=0; i<parallel_dynamic_workload.workload.size(); ) {
         current_time=omp_get_wtime();
         if(parallel_dynamic_workload.time[i]<=current_time-start_time){
             //push it to workspace
             if(parallel_dynamic_workload.workload[i]==DUPDATE){
-                single_task = {.type = DUPDATE, .source = -1, .update_start=updates[i].first, .update_end=updates[i].second};
+                single_task = {.type = DUPDATE, .source = -1, .update_start=updates[update_idx].first, .update_end=updates[update_idx].second};
                 q.push(single_task);
+                update_idx++;
             } else{
-                query_queue.push_back(queries[i]);
-                response_time_start[queries[i]]=current_time;
-                single_task = {.type = DQUERY, .source = queries[i] , .update_start=-1, .update_end=-1};
+                query_queue.push_back(queries[query_idx]);
+                response_time_start[queries[query_idx]]=current_time;
+                single_task = {.type = DQUERY, .source = queries[query_idx] , .update_start=-1, .update_end=-1};
                 q.push(single_task);
+                query_idx++;
             }
             i++;
         }
