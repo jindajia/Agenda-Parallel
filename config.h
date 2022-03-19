@@ -20,8 +20,10 @@
 #include <boost/filesystem.hpp>
 #include <unordered_map>
 #include <list>
+#include "MPMCQueue.h"
 using namespace boost;
 using namespace boost::property_tree;
+using namespace rigtorp;
 
 
 const double ALPHA_DEFAULT = 0.2;
