@@ -2534,7 +2534,7 @@ void generate_parallel_dynamic_workload_workspace(bool if_hybrid=false){
 }
 //-------------------------------------------------------------------------------------------------------------------------------------------------
 
-void ProduceItem(rigtorp::MPMCQueue<DY_worktask> &q, double start_time, vector<int> &queries, vector<pair<int,int>> &updates, int graph_n) {
+void ProduceItem(rigtorp::MPMCQueue<DY_worktask> &main_queue, double start_time, vector<int> &queries, vector<pair<int,int>> &updates, int graph_n) {
     response_time_start.reserve(graph_n);
     response_time_wait.reserve(graph_n);
     response_time_end.reserve(graph_n);
@@ -2549,13 +2549,13 @@ void ProduceItem(rigtorp::MPMCQueue<DY_worktask> &q, double start_time, vector<i
             //push it to workspace
             if(parallel_dynamic_workload.workload[i]==DUPDATE){
                 single_task = {.type = DUPDATE, .source = -1, .update_start=updates[update_idx].first, .update_end=updates[update_idx].second};
-                q.push(single_task);
+                main_queue.push(single_task);
                 update_idx++;
             } else{
                 query_queue.push_back(queries[query_idx]);
                 response_time_start[queries[query_idx]]=current_time;
                 single_task = {.type = DQUERY, .source = queries[query_idx] , .update_start=-1, .update_end=-1};
-                q.push(single_task);
+                main_queue.push(single_task);
                 query_idx++;
             }
             i++;
@@ -2716,12 +2716,15 @@ void dynamic_ssquery_parallel(Graph& graph, int num_total_worker){
         const uint64_t numConsumers = num_total_worker;
         const uint64_t numProducerThreds = 1;
         const uint64_t queueLength = 10;
-        std::mutex pop_queue_mtx;
+        std::mutex main_queue_mtx;
         std::mutex write_mtx;
         std::mutex read_mtx;
         uint64_t readCnt = 0;
         uint64_t popCnt = 0;
-        rigtorp::MPMCQueue<DY_worktask> q(queueLength);
+        rigtorp::MPMCQueue<DY_worktask> main_queue(queueLength);
+        rigtorp::MPMCQueue<DY_worktask> update_queue(queueLength);
+        rigtorp::MPMCQueue<DY_worktask> query_queue(queueLength);
+
         std::atomic<bool> flag(false);
         std::vector<std::thread> threads;
         //Producer
@@ -2729,7 +2732,7 @@ void dynamic_ssquery_parallel(Graph& graph, int num_total_worker){
         threads.push_back(std::thread([&, i] {
             while (!flag)
             ;
-            ProduceItem(q, OMP_check_total_time_start, queries, updates, graph.n);
+            ProduceItem(main_queue, OMP_check_total_time_start, queries, updates, graph.n);
         }));
         }
 
@@ -2743,12 +2746,12 @@ void dynamic_ssquery_parallel(Graph& graph, int num_total_worker){
             DY_worktask single_task;
             string task_type;
             while (true) {
-                pop_queue_mtx.lock();
+                main_queue_mtx.lock();
                 if (popCnt>=numOps) {
-                    pop_queue_mtx.unlock();
+                    main_queue_mtx.unlock();
                     break;
                 }
-                q.pop(single_task);
+                main_queue.pop(single_task);
                 temp_pop_cnt = popCnt;
                 popCnt++;
                 if(single_task.type == DQUERY){
@@ -2760,7 +2763,7 @@ void dynamic_ssquery_parallel(Graph& graph, int num_total_worker){
                 } else if(single_task.type == DUPDATE) {
                     write_mtx.lock();
                 }
-                pop_queue_mtx.unlock();
+                main_queue_mtx.unlock();
                 if (single_task.type==DQUERY){
                     task_type = "QUERY";
                 }else {
