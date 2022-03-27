@@ -115,6 +115,7 @@ vector<map<int, double>> reserve_maps;
 vector<int> dynamic_workload;
 
 struct DY_worktask{
+    int index;
     int type;
     int source;
     int update_start;

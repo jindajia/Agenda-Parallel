@@ -2533,38 +2533,50 @@ void generate_parallel_dynamic_workload_workspace(bool if_hybrid=false){
 }
 //-------------------------------------------------------------------------------------------------------------------------------------------------
 
-void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask> &update_mpmc_queue, MPMCQueue<DY_worktask> &query_mpmc_queue, std::mutex &main_queue_mtx, std::mutex &update_queue_mtx, std::mutex &query_queue_mtx, uint64_t taskSize) {
+void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask> &update_mpmc_queue, MPMCQueue<DY_worktask> &query_mpmc_queue, uint64_t taskSize) {
     int popCnt = 0;
-    DY_worktask single_task;
-    std::cout<<"TaskManager: "<<taskSize<<" tasks."<<endl;
+    const DY_worktask task_null = {.index = -1, .type = -1, .source = -1, .update_start=-1, .update_end=-1};
+    DY_worktask query_task = task_null;
+    DY_worktask update_task = task_null;
+    std::cout<<"TaskManager has "<<taskSize<<" tasks."<<endl;
     while(true) {
         if (popCnt>=taskSize) {
             break;
         }
-        query_queue_mtx.lock();
-        if (query_mpmc_queue.size()>0) {
-            query_mpmc_queue.pop(single_task);
-            query_queue_mtx.unlock();
-            main_mpmc_queue.push(single_task);
-            popCnt++;
-            continue;
-        } else {
-            query_queue_mtx.unlock();
+        if (query_task.index==-1) {
+            query_mpmc_queue.try_pop(query_task);
         }
-        update_queue_mtx.lock();
-        if (update_mpmc_queue.size()>0) {
-            update_mpmc_queue.pop(single_task);
-            update_queue_mtx.unlock();
-            main_mpmc_queue.push(single_task);
-            popCnt++;
-            continue;
-        } else {
-            update_queue_mtx.unlock();
+        if (update_task.index==-1) {
+            update_mpmc_queue.try_pop(update_task);
+        }
+        if (update_task.index!=-1 || query_task.index!=-1) {
+            if (update_task.index!=-1 && query_task.index!=-1) {
+                if (query_task.index < update_task.index) {
+                    main_mpmc_queue.push(query_task);
+                    popCnt++;
+                    query_task = task_null;
+                } else {
+                    main_mpmc_queue.push(update_task);
+                    popCnt++;
+                    update_task = task_null;
+                }
+                continue;
+            }
+
+            if (query_task.index!=-1) {
+                main_mpmc_queue.push(query_task);
+                popCnt++;
+                query_task = task_null;
+            } else {
+                main_mpmc_queue.push(update_task);
+                popCnt++;
+                update_task = task_null;
+            }
         }
     }
 }
 
-void ProduceItem(MPMCQueue<DY_worktask> &update_mpmc_queue, MPMCQueue<DY_worktask> &query_mpmc_queue, std::mutex &update_queue_mtx, std::mutex &query_queue_mtx,double start_time, vector<int> &queries, vector<pair<int,int>> &updates, int graph_n) {
+void ProduceItem(MPMCQueue<DY_worktask> &update_mpmc_queue, MPMCQueue<DY_worktask> &query_mpmc_queue, double start_time, vector<int> &queries, vector<pair<int,int>> &updates, int graph_n) {
     response_time_start.reserve(graph_n);
     response_time_wait.reserve(graph_n);
     response_time_end.reserve(graph_n);
@@ -2578,18 +2590,14 @@ void ProduceItem(MPMCQueue<DY_worktask> &update_mpmc_queue, MPMCQueue<DY_worktas
         if(parallel_dynamic_workload.time[i]<=current_time-start_time){
             //push it to workspace
             if(parallel_dynamic_workload.workload[i]==DUPDATE){
-                single_task = {.type = DUPDATE, .source = -1, .update_start=updates[update_idx].first, .update_end=updates[update_idx].second};
-                update_queue_mtx.lock();
+                single_task = {.index = i, .type = DUPDATE, .source = -1, .update_start=updates[update_idx].first, .update_end=updates[update_idx].second};
                 update_mpmc_queue.push(single_task);
-                update_queue_mtx.unlock();
                 update_idx++;
             } else{
                 query_queue.push_back(queries[query_idx]);
                 response_time_start[queries[query_idx]]=current_time;
-                single_task = {.type = DQUERY, .source = queries[query_idx] , .update_start=-1, .update_end=-1};
-                query_queue_mtx.lock();
+                single_task = {.index = i, .type = DQUERY, .source = queries[query_idx] , .update_start=-1, .update_end=-1};
                 query_mpmc_queue.push(single_task);
-                query_queue_mtx.unlock();
                 query_idx++;
             }
             i++;
@@ -2751,8 +2759,6 @@ void dynamic_ssquery_parallel(Graph& graph, int num_total_worker){
         const uint64_t numProducerThreds = 1;
         const uint64_t queueLength = max((uint64_t)20, numOps/2);
         std::mutex main_queue_mtx;
-        std::mutex update_queue_mtx;
-        std::mutex query_queue_mtx;
         std::mutex write_mtx;
         std::mutex read_mtx;
         uint64_t readCnt = 0;
@@ -2768,14 +2774,14 @@ void dynamic_ssquery_parallel(Graph& graph, int num_total_worker){
         threads.push_back(std::thread([&, i] {
             while (!flag)
             ;
-            ProduceItem(update_mpmc_queue, query_mpmc_queue, update_queue_mtx, query_queue_mtx, OMP_check_total_time_start, queries, updates, graph.n);
+            ProduceItem(update_mpmc_queue, query_mpmc_queue, OMP_check_total_time_start, queries, updates, graph.n);
 
         }));
         uint64_t i_2 = i + numProducerThreds;
         threads.push_back(std::thread([&, i_2] {
             while (!flag)
             ;
-            TaskManager(main_mpmc_queue, update_mpmc_queue, query_mpmc_queue, main_queue_mtx, update_queue_mtx, query_queue_mtx, numOps);
+            TaskManager(main_mpmc_queue, update_mpmc_queue, query_mpmc_queue, numOps);
         }));
         }
 
