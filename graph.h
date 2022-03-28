@@ -49,6 +49,8 @@ public:
         this->data_folder = old_graph.data_folder;
         this->alpha = old_graph.alpha;
         if(config.action != GEN_SS_QUERY&&config.action != CALCULATE_ACCURACY) {
+            this->n = old_graph.n;
+            this->m = old_graph.m;
             this->g = old_graph.g;
             this->gr = old_graph.gr;
         } else {

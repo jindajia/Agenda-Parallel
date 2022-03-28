@@ -2534,6 +2534,7 @@ void generate_parallel_dynamic_workload_workspace(bool if_hybrid=false){
 //-------------------------------------------------------------------------------------------------------------------------------------------------
 
 void UpdateManager(Graph &graph, MPMCQueue<pair<DY_worktask,bool>> &uManager_mpmc_queue, uint64_t updateSize) {
+    std::cout<<"UpdateManager has "<<updateSize<<" updates."<<endl;
     int popCnt = 0;
     pair<DY_worktask,bool> update_task;
     int u,v;
