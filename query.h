@@ -2687,17 +2687,20 @@ void ConsumeItem(Graph& graph, int thread_idx, int head, const DY_worktask &sing
         v=single_task.update_end;
         map<int, vector<double>>::iterator it_map;
         set<int>::iterator it_set = inacc_finish_set.find(single_task.index);
+        vector<double> temp_inacc_idx;
         if(it_set!=inacc_finish_set.end()){
             cout<<"Index inaccuracy already exist"<<endl;
             graph.m++;
             graph.g[u].push_back(v);
             graph.gr[v].push_back(u);
-            for(int k=0; k<total_worker_number; k++){
-                inacc_idx_all[k] = inacc_idx_map[single_task.index];
-            }
+            temp_inacc_idx = inacc_idx_map[single_task.index];
             it_map = inacc_idx_map.find(single_task.index);
             inacc_finish_set.erase(it_set);
             inacc_idx_map.erase(it_map);
+            for(int k=0; k<total_worker_number; k++){
+                inacc_idx_all[k] = temp_inacc_idx;
+            }
+
         } else {
             double errorlimit=double(std::max(1,(int)(graph.g[u].size())))/graph.n;
             double epsrate=0.5;
@@ -2782,8 +2785,7 @@ void dynamic_workload_management(double start_time, vector<int> &queries, vector
     parallel_system_status.is_END=1;
 }
 
-void dynamic_ssquery_parallel(Graph& graph, int num_total_worker){
-    Graph graph_2(graph);
+void dynamic_ssquery_parallel(Graph& graph, Graph& graph_2,int num_total_worker){
 	vector<int> queries;
     load_ss_query(queries);
     INFO(queries.size());
