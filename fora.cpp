@@ -393,7 +393,6 @@ int main(int argc, char *argv[]) {
 		cout << "Memory usage (MB):" << get_proc_memory()/1000.0 << endl << endl; 
     }
     else if(config.action == DYNAMIC_SS_PARALLEL){//------------------PARALLEL-----------!!----------------------------------
-		double OMP_total_start_time=omp_get_wtime();
 		config.graph_location = config.get_graph_folder();
         Graph graph(config.graph_location);
         INFO("load graph finish");
@@ -425,7 +424,7 @@ int main(int argc, char *argv[]) {
 		}
 
         
-
+        double OMP_total_start_time=omp_get_wtime();
 		dynamic_ssquery_parallel(graph, num_total_worker);
 		double OMP_total_end_time=omp_get_wtime();
 		printf("OMP CHECK TOTAL TIME%.12f\n", OMP_total_end_time-OMP_total_start_time);
