@@ -44,6 +44,19 @@ public:
         cout << "init graph n: " << this->n << " m: " << this->m << endl;
     }
 
+    Graph(const Graph& old_graph) {
+        INFO("graph copy constructor");
+        this->data_folder = old_graph.data_folder;
+        this->alpha = old_graph.alpha;
+        if(config.action != GEN_SS_QUERY&&config.action != CALCULATE_ACCURACY) {
+            this->g = old_graph.g;
+            this->gr = old_graph.gr;
+        } else {
+            this->n = old_graph.n;
+            this->m = old_graph.m;
+        }
+        cout << "copy graph n: " << this->n << " m: " << this->m << endl;
+    }
 
     void init_nm() {
         string attribute_file = data_folder + FILESEP + "attribute.txt";
