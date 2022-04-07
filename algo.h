@@ -47,6 +47,10 @@ vector<double> response_time_start;
 vector<double> response_time_wait;
 vector<double> response_time_end;
 
+map<int, vector<double>> inacc_idx_map;
+set<int> inacc_finish_set;
+ReversePushidx reverse_idx_um;
+
 iMap<int> reuse_idx;
 vector<int> reuse_idx_vector;
 iMap<double> ppr_rw;
@@ -948,12 +952,11 @@ inline void init_multi_setting(int n){
     INFO(config.rmax_scale);
 }
 
-static void reverse_push(int t, const Graph &graph, double myeps, double init_residual = 1) {
+static void reverse_push(ReversePushidx &reverse_idx, int t, const Graph &graph, double myeps, double init_residual = 1) {
     reverse_idx.first.clean();
     reverse_idx.second.clean();
 
-    static unordered_map<int, bool> idx;
-    idx.clear();
+    unordered_map<int, bool> idx;
 
     vector<int> q;
     q.reserve(graph.n);

@@ -397,7 +397,8 @@ int main(int argc, char *argv[]) {
         Graph graph(config.graph_location);
         INFO("load graph finish");
         init_parameter(config, graph);
-		
+		Graph graph_2(graph);
+
 		std::string prefix = "result/"+config.graph_alias;
 		INFO(access(prefix.c_str(), NULL));
 		if (access(prefix.c_str(), NULL) == -1)
@@ -423,9 +424,8 @@ int main(int argc, char *argv[]) {
 			rebuild_idx(graph);
 		}
 
-        
         double OMP_total_start_time=omp_get_wtime();
-		dynamic_ssquery_parallel(graph, num_total_worker);
+        dynamic_ssquery_parallel(graph, graph_2, num_total_worker);
 		double OMP_total_end_time=omp_get_wtime();
 		printf("OMP CHECK TOTAL TIME%.12f\n", OMP_total_end_time-OMP_total_start_time);
 		cout << "Memory usage (MB):" << get_proc_memory()/1000.0 << endl << endl; 

@@ -2533,7 +2533,58 @@ void generate_parallel_dynamic_workload_workspace(bool if_hybrid=false){
 }
 //-------------------------------------------------------------------------------------------------------------------------------------------------
 
-void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask> &update_mpmc_queue, MPMCQueue<DY_worktask> &query_mpmc_queue, uint64_t taskSize) {
+void UpdateManager(Graph &graph, MPMCQueue<pair<DY_worktask,bool>> &uManager_mpmc_queue, uint64_t updateSize) {
+    std::cout<<"UpdateManager has "<<updateSize<<" updates."<<endl;
+    int popCnt = 0;
+    pair<DY_worktask,bool> update_task;
+    int u,v;
+    while(true) {
+        if (popCnt>=updateSize) {
+            break;
+        }
+        uManager_mpmc_queue.pop(update_task);
+        if (update_task.first.type!=DUPDATE) {
+            continue;
+        }
+        if (update_task.second==true) {
+            double errorlimit=double(std::max(1,(int)(graph.g[u].size())))/graph.n;
+            double epsrate=0.5;
+            if(config.graph_alias=="webstanford"){
+                errorlimit=double(std::max(1,(int)(graph.g[u].size())))/graph.n*10;
+            }
+            if(errorlimit!=0){			
+                {
+                    reverse_push(reverse_idx_um, u, graph, errorlimit*epsrate, 1);
+                }
+
+                int count=0;
+                graph.m++;
+                graph.g[u].push_back(v);
+                graph.gr[v].push_back(u);
+
+                inacc_idx_map[update_task.first.index].resize(graph.n);
+                inacc_idx_map[update_task.first.index].assign(graph.n, 1);
+                {   
+                    for(long j=0; j<reverse_idx_um.first.occur.m_num; j++){
+                        long id = reverse_idx_um.first.occur[j];
+                        double pmin=min((reverse_idx_um.first[id]+errorlimit*epsrate)*(1-config.alpha)/config.alpha,1.0);
+                        inacc_idx_map[update_task.first.index][id]*=(1-pmin/graph.g[u].size());
+                    }
+                }
+                inacc_finish_set.insert(update_task.first.index);
+            }
+        } else {
+            u=update_task.first.update_start;
+            v=update_task.first.update_end;
+            graph.m++;
+            graph.g[u].push_back(v);
+            graph.gr[v].push_back(u);
+        }
+        popCnt++;
+    }
+}
+
+void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask> &update_mpmc_queue, MPMCQueue<DY_worktask> &query_mpmc_queue, MPMCQueue<pair<DY_worktask,bool>> &uManager_mpmc_queue, uint64_t taskSize) {
     int popCnt = 0;
     const DY_worktask task_null = {.index = -1, .type = -1, .source = -1, .update_start=-1, .update_end=-1};
     DY_worktask query_task = task_null;
@@ -2557,6 +2608,7 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
                     query_task = task_null;
                 } else {
                     main_mpmc_queue.push(update_task);
+                    uManager_mpmc_queue.push(make_pair(update_task, true));
                     popCnt++;
                     update_task = task_null;
                 }
@@ -2569,6 +2621,7 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
                 query_task = task_null;
             } else {
                 main_mpmc_queue.push(update_task);
+                uManager_mpmc_queue.push(make_pair(update_task, true));
                 popCnt++;
                 update_task = task_null;
             }
@@ -2632,28 +2685,45 @@ void ConsumeItem(Graph& graph, int thread_idx, int head, const DY_worktask &sing
         cout<< "UPDATE"<<endl;	
         u=single_task.update_start;
         v=single_task.update_end;
-        
-        double errorlimit=double(std::max(1,(int)(graph.g[u].size())))/graph.n;
-        double epsrate=0.5;
-        if(config.graph_alias=="webstanford"){
-            errorlimit=double(std::max(1,(int)(graph.g[u].size())))/graph.n*10;
-        }
-        if(errorlimit!=0){			
-            {
-                reverse_push(u, graph, errorlimit*epsrate, 1);
-            }
-
-            int count=0;
+        map<int, vector<double>>::iterator it_map;
+        set<int>::iterator it_set = inacc_finish_set.find(single_task.index);
+        vector<double> temp_inacc_idx;
+        if(it_set!=inacc_finish_set.end()){
+            cout<<"Index inaccuracy already exist"<<endl;
             graph.m++;
             graph.g[u].push_back(v);
             graph.gr[v].push_back(u);
+            temp_inacc_idx = inacc_idx_map[single_task.index];
+            it_map = inacc_idx_map.find(single_task.index);
+            inacc_finish_set.erase(it_set);
+            inacc_idx_map.erase(it_map);
+            for(int k=0; k<total_worker_number; k++){
+                inacc_idx_all[k] = temp_inacc_idx;
+            }
 
-            {   
-                for(long j=0; j<reverse_idx.first.occur.m_num; j++){
-                    long id = reverse_idx.first.occur[j];
-                    double pmin=min((reverse_idx.first[id]+errorlimit*epsrate)*(1-config.alpha)/config.alpha,1.0);
-                    for(int k=0; k<total_worker_number; k++){
-                        inacc_idx_all[k][id]*=(1-pmin/graph.g[u].size());
+        } else {
+            double errorlimit=double(std::max(1,(int)(graph.g[u].size())))/graph.n;
+            double epsrate=0.5;
+            if(config.graph_alias=="webstanford"){
+                errorlimit=double(std::max(1,(int)(graph.g[u].size())))/graph.n*10;
+            }
+            if(errorlimit!=0){			
+                {
+                    reverse_push(reverse_idx, u, graph, errorlimit*epsrate, 1);
+                }
+
+                int count=0;
+                graph.m++;
+                graph.g[u].push_back(v);
+                graph.gr[v].push_back(u);
+
+                {   
+                    for(long j=0; j<reverse_idx.first.occur.m_num; j++){
+                        long id = reverse_idx.first.occur[j];
+                        double pmin=min((reverse_idx.first[id]+errorlimit*epsrate)*(1-config.alpha)/config.alpha,1.0);
+                        for(int k=0; k<total_worker_number; k++){
+                            inacc_idx_all[k][id]*=(1-pmin/graph.g[u].size());
+                        }
                     }
                 }
             }
@@ -2715,7 +2785,7 @@ void dynamic_workload_management(double start_time, vector<int> &queries, vector
     parallel_system_status.is_END=1;
 }
 
-void dynamic_ssquery_parallel(Graph& graph, int num_total_worker){
+void dynamic_ssquery_parallel(Graph& graph, Graph& graph_2,int num_total_worker){
 	vector<int> queries;
     load_ss_query(queries);
     INFO(queries.size());
@@ -2740,6 +2810,8 @@ void dynamic_ssquery_parallel(Graph& graph, int num_total_worker){
 		
         reverse_idx.first.initialize(graph.n);
         reverse_idx.second.initialize(graph.n);
+        reverse_idx_um.first.initialize(graph.n);
+        reverse_idx_um.second.initialize(graph.n);
         /*
 		inacc_idx_1.reserve(graph.n);
 		inacc_idx_1.assign(graph.n, 1);
@@ -2767,6 +2839,8 @@ void dynamic_ssquery_parallel(Graph& graph, int num_total_worker){
         MPMCQueue<DY_worktask> update_mpmc_queue(queueLength);
         MPMCQueue<DY_worktask> query_mpmc_queue(queueLength);
 
+        MPMCQueue<pair<DY_worktask,bool>> uManager_mpmc_queue(queueLength);
+
         std::atomic<bool> flag(false);
         std::vector<std::thread> threads;
         //Producer
@@ -2781,7 +2855,13 @@ void dynamic_ssquery_parallel(Graph& graph, int num_total_worker){
         threads.push_back(std::thread([&, i_2] {
             while (!flag)
             ;
-            TaskManager(main_mpmc_queue, update_mpmc_queue, query_mpmc_queue, numOps);
+            TaskManager(main_mpmc_queue, update_mpmc_queue, query_mpmc_queue, uManager_mpmc_queue, numOps);
+        }));
+        uint64_t i_3 = i*2 + numProducerThreds;
+        threads.push_back(std::thread([&, i_3] {
+            while (!flag)
+            ;
+            UpdateManager(graph_2, uManager_mpmc_queue, config.update_size);
         }));
         }
 
@@ -3088,7 +3168,7 @@ void dynamic_ssquery(Graph& graph){
 					
 					{
 						Timer timer(11);
-						reverse_push(u, graph, errorlimit*epsrate, 1);
+						reverse_push(reverse_idx, u, graph, errorlimit*epsrate, 1);
 					}
 					//display_imap(reverse_idx.first);
 					
@@ -3195,7 +3275,7 @@ void dynamic_ssquery(Graph& graph){
 				
 				{
 					Timer timer(11);
-					reverse_push(u, graph, errorlimit*epsrate, 1);
+					reverse_push(reverse_idx, u, graph, errorlimit*epsrate, 1);
 				}
 				//display_imap(reverse_idx.first);
 				
@@ -3535,7 +3615,7 @@ void dynamic_topk(Graph graph){
 					
 					{
 						Timer timer(11);
-						reverse_push(u, graph, errorlimit*epsrate, 1);
+						reverse_push(reverse_idx, u, graph, errorlimit*epsrate, 1);
 					}
 					//display_imap(reverse_idx.first);
 					
@@ -3648,7 +3728,7 @@ void dynamic_topk(Graph graph){
 				
 				{
 					Timer timer(11);
-					reverse_push(u, graph, errorlimit*config.errorlimiter, 1);
+					reverse_push(reverse_idx, u, graph, errorlimit*config.errorlimiter, 1);
 				}
 				//display_imap(reverse_idx.first);
 				
@@ -3811,7 +3891,7 @@ void dynamic_onehop(Graph graph){
 					
 					{
 						Timer timer(11);
-						reverse_push(u, graph, errorlimit*epsrate, 1);
+						reverse_push(reverse_idx, u, graph, errorlimit*epsrate, 1);
 					}
 					//display_imap(reverse_idx.first);
 					
@@ -3918,7 +3998,7 @@ void dynamic_onehop(Graph graph){
 				
 				{
 					Timer timer(11);
-					reverse_push(u, graph, errorlimit*epsrate, 1);
+					reverse_push(reverse_idx, u, graph, errorlimit*epsrate, 1);
 				}
 				//display_imap(reverse_idx.first);
 				
@@ -4078,7 +4158,7 @@ void dynamic_hybrid(Graph graph){
 				
 				{
 					Timer timer(11);
-					reverse_push(u, graph, errorlimit*epsrate, 1);
+					reverse_push(reverse_idx, u, graph, errorlimit*epsrate, 1);
 				}
 				//display_imap(reverse_idx.first);
 				
