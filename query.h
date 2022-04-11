@@ -2747,14 +2747,12 @@ void ConsumeItem(Graph& graph, int thread_idx, int head, const DY_worktask &sing
     if(single_task.type==DUPDATE) {
         //write mutex
         int u,v;
-        cout<< "UPDATE"<<endl;	
         u=single_task.update_start;
         v=single_task.update_end;
         map<int, vector<double>>::iterator it_map;
         set<int>::iterator it_set = inacc_finish_set.find(single_task.index);
         vector<double> temp_inacc_idx;
         if(it_set!=inacc_finish_set.end()){
-            cout<<"Index inaccuracy already exist"<<endl;
             graph.m++;
             graph.g[u].push_back(v);
             graph.gr[v].push_back(u);
@@ -2961,7 +2959,7 @@ void dynamic_ssquery_parallel(Graph& graph, Graph& graph_2,int num_total_worker)
                 }else {
                     task_type = "UPDATE";
                 }
-                std::cout << "Consumer thread " << i<<": "<< std::this_thread::get_id()<< " is consuming the " << single_task.index << "^th task doing " << task_type <<"." << std::endl;
+                cout << "Consumer thread " << i<<": "<< this_thread::get_id()<< " is consuming the " << single_task.index << "^th task doing " << task_type <<"." << endl;
                 ConsumeItem(graph, i, temp_pop_cnt, single_task, OMP_check_total_time_start, i, numConsumers);
                 if(single_task.type == DQUERY){
                     read_mtx.lock();
