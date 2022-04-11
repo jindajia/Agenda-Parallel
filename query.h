@@ -2622,14 +2622,14 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
             cout<<"error_bound = "<<error_bound<<" graph_n = "<<graph_n<<" epsilon = "<<config.epsilon<<endl;
             for (int i=0; i<orderedList.size(); ++i) {
                 it--;
+                if ((*it).index>queryList.front().index){
+                    continue;
+                }
                 if((*it).type==DQUERY) {
                     it++;
                     flag = true;
                     break;
                 } else if((*it).type==DUPDATE) {
-                    if ((*it).index>queryList.front().index){
-                        continue;
-                    }
                     if (inacc_finish_set.find((*it).index)!=inacc_finish_set.end()) {
                         id = reverse_idx_um.first.occur[queryList.front().source];
                         error_sum += (1 - inacc_idx_map[(*it).index][id]);
