@@ -2544,7 +2544,7 @@ void UpdateManager(Graph &graph, MPMCQueue<DY_worktask> &uManager_mpmc_queue, ui
         }
         uManager_mpmc_queue.pop(single_task);
         if (single_task.type==DQUERY) {
-            query_graph_n_map[single_task.source] = graph.n;
+            query_graph_n_map[single_task.index] = graph.n;
             popCnt++;
             continue;
         }
