@@ -2577,10 +2577,11 @@ void UpdateManager(Graph &graph, MPMCQueue<DY_worktask> &uManager_mpmc_queue, ui
 }
 
 void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask> &tManager_mpmc_queue, uint64_t taskSize) {
-    const int min_task_num = 3;//when the num of task in main_mpmc_queue lower than that, move task from orderedQueue to main_Queue.
+    const int min_task_num = 3;//when the num of task in main_mpmc_queue lower than that, move task from orderedList to main_Queue.
     int popCnt = 0;
-    vector<DY_worktask> orderedQueue;
-    orderedQueue.reserve(50);
+    int totalQueueSize = 0;
+    list<DY_worktask> orderedList;
+    list<DY_worktask> queryList;
     const DY_worktask task_null = {.index = -1, .type = -1, .source = -1, .update_start=-1, .update_end=-1};
     DY_worktask single_task = task_null;
     std::cout<<"TaskManager has "<<taskSize<<" tasks."<<endl;
@@ -2589,23 +2590,33 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
             break;
         }
         if (tManager_mpmc_queue.try_pop(single_task)) {
-            /* add task to orderedQueue */
+            /* add task to orderedList */
             if (single_task.type == DUPDATE) {
-                orderedQueue.push_back(single_task);
+                orderedList.push_back(single_task);
             } else if (single_task.type == DQUERY) {
-                orderedQueue.push_back(single_task);
+                if (orderedList.size()==0 || orderedList.back().type==DQUERY){
+                    orderedList.push_back(single_task);
+                } else {
+                    queryList.push_back(single_task);
+                }
             }
             single_task = task_null;
         }
-        if (main_mpmc_queue.size() <= min_task_num && orderedQueue.size()>0) {
-            /* move orderedQueue tasks to main_mpmc_queue */
-            int addSize = min((int)orderedQueue.size(), 5);
+        totalQueueSize = orderedList.size() + queryList.size();
+        if (main_mpmc_queue.size() <= min_task_num && totalQueueSize>0) {
+            /* move orderedList tasks to main_mpmc_queue */
+            int addSize = min(totalQueueSize, 5);
             std::cout<<"main_queue lower than bar, add "<<addSize<<" tasks"<<endl;
             for (int i=0; i< addSize; ++i) {
-                main_mpmc_queue.push(orderedQueue[i]);
+                if(orderedList.front().index<queryList.front().index) {
+                    main_mpmc_queue.push(orderedList.front());
+                    orderedList.pop_front();
+                }else {
+                    main_mpmc_queue.push(queryList.front());
+                    queryList.pop_front();
+                }
                 popCnt++;
             }
-            orderedQueue.erase(orderedQueue.begin(),orderedQueue.begin()+addSize);
         }
     }
 }
