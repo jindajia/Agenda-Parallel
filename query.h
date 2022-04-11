@@ -2616,7 +2616,6 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
             flag = false;
             error_sum = 0;
             error_bound = config.epsilon/graph_n*(1.0-theta);
-            cout<<"error_bound = "<<error_bound<<" graph_n = "<<graph_n<<" epsilon = "<<config.epsilon<<endl;
             for (int i=0; i<orderedList.size(); ++i) {
                 it--;
                 if ((*it).index>queryList.front().index){
