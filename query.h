@@ -2635,7 +2635,7 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
                     }
                     if (inacc_finish_set.find((*it).index)!=inacc_finish_set.end()) {
                         error_sum += (1 - inacc_idx_map[(*it).index][queryList.front().source]);
-                        cout<<"error_sum = "<<error_sum<<" query source = "<<queryList.front().source<<" inacc = "<<inacc_idx_map[(*it).index][queryList.front().source]<<endl;
+                        // cout<<"error_sum = "<<error_sum<<" query source = "<<queryList.front().source<<" inacc = "<<inacc_idx_map[(*it).index][queryList.front().source]<<endl;
                         if (error_sum < error_bound) {
                             if (it==orderedList.begin()) {
                                 flag = true;
