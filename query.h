@@ -2624,7 +2624,7 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
             error_bound = config.epsilon/graph_n*(1.0-theta);
             cout<<"error_bound = "<<error_bound<<" graph_n = "<<graph_n<<" epsilon = "<<config.epsilon<<endl;
             for (int i=0; i<orderedList.size(); ++i) {
-                it = --it;
+                it--;
                 if((*it).type==DQUERY) {
                     it++;
                     flag = true;
@@ -2635,7 +2635,7 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
                     }
                     if (inacc_finish_set.find((*it).index)!=inacc_finish_set.end()) {
                         error_sum += (1 - inacc_idx_map[(*it).index][queryList.front().source]);
-                        // cout<<"error_sum = "<<error_sum<<" query source = "<<queryList.front().source<<" inacc = "<<inacc_idx_map[(*it).index][queryList.front().source]<<endl;
+                        cout<<"error_sum = "<<error_sum<<" query source = "<<queryList.front().source<<" inacc = "<<inacc_idx_map[(*it).index][queryList.front().source]<<endl;
                         if (error_sum < error_bound) {
                             if (it==orderedList.begin()) {
                                 flag = true;
