@@ -2605,7 +2605,7 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
                 main_mpmc_queue.push(orderedQueue[i]);
                 popCnt++;
             }
-            orderedQueue.clear();
+            orderedQueue.erase(orderedQueue.begin(),orderedQueue.begin()+addSize);
         }
     }
 }
