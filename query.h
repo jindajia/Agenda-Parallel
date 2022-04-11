@@ -2961,7 +2961,7 @@ void dynamic_ssquery_parallel(Graph& graph, Graph& graph_2,int num_total_worker)
                 }else {
                     task_type = "UPDATE";
                 }
-                std::cout << "Consumer thread " << i<<": "<< std::this_thread::get_id()<< " is consuming the " << temp_pop_cnt << "^th item doing " << task_type <<"." << std::endl;
+                std::cout << "Consumer thread " << i<<": "<< std::this_thread::get_id()<< " is consuming the " << single_task.index << "^th task doing " << task_type <<"." << std::endl;
                 ConsumeItem(graph, i, temp_pop_cnt, single_task, OMP_check_total_time_start, i, numConsumers);
                 if(single_task.type == DQUERY){
                     read_mtx.lock();
