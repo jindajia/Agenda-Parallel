@@ -2637,7 +2637,12 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
                         error_sum += (1 - inacc_idx_map[(*it).index][queryList.front().source]);
                         cout<<"error_sum = "<<error_sum<<" query source = "<<queryList.front().source<<" inacc = "<<inacc_idx_map[(*it).index][queryList.front().source]<<endl;
                         if (error_sum < error_bound) {
-                            continue;
+                            if (it==orderedList.begin()) {
+                                flag = true;
+                                break;
+                            } else{
+                                continue;
+                            }
                         } else {
                             it++;
                             flag = true;
