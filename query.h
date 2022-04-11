@@ -2544,7 +2544,6 @@ void UpdateManager(Graph &graph, MPMCQueue<DY_worktask> &uManager_mpmc_queue, ui
         }
         uManager_mpmc_queue.pop(single_task);
         if (single_task.type==DQUERY) {
-            query_graph_n_map[single_task.index] = graph.n;
             popCnt++;
             continue;
         }
@@ -2587,7 +2586,7 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
     double theta = 0.8;
     double error_sum;
     double error_bound;
-    int graph_n;
+    long graph_n = config.graph_n;
     list<DY_worktask> orderedList;
     list<DY_worktask> queryList;
     list<DY_worktask>::iterator it;
@@ -2613,10 +2612,9 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
         }
 
         /* insert query task to orderedqueue start*/
-        if (queryList.size()>0 && query_graph_n_map.find(queryList.front().index)!=query_graph_n_map.end()) {
+        if (queryList.size()>0) {
             it = orderedList.end();
             flag = false;
-            graph_n = query_graph_n_map[queryList.front().index];
             error_sum = 0;
             error_bound = config.epsilon/graph_n*(1.0-theta);
             cout<<"error_bound = "<<error_bound<<" graph_n = "<<graph_n<<" epsilon = "<<config.epsilon<<endl;
