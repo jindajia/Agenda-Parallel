@@ -2612,7 +2612,7 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
         }
 
         /* insert query task to orderedqueue start*/
-        if (queryList.size()>0) {
+        if (queryList.size()>0 && query_graph_n_map.find(queryList.front().index)!=query_graph_n_map.end()) {
             it = orderedList.end();
             flag = false;
             graph_n = query_graph_n_map[queryList.front().index];
