@@ -2570,6 +2570,7 @@ void UpdateManager(Graph &graph, MPMCQueue<DY_worktask> &uManager_mpmc_queue, ui
                     long id = reverse_idx_um.first.occur[j];
                     double pmin=min((reverse_idx_um.first[id]+errorlimit*epsrate)*(1-config.alpha)/config.alpha,1.0);
                     inacc_idx_map[single_task.index][id]*=(1-pmin/graph.g[u].size());
+                    cout<<"j: "<<j<<" pmin: "<<pmin<<" inacc: "<<inacc_idx_map[single_task.index][id]<<endl;
                 }
             }
             inacc_finish_set.insert(single_task.index);
@@ -2618,7 +2619,7 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
             graph_n = query_graph_n_map[queryList.front().index];
             error_sum = 0;
             error_bound = config.epsilon/graph_n*(1.0-theta);
-            cout<<"error_bound = "<<error_bound<<"."<<endl;
+            cout<<"error_bound = "<<error_bound<<" graph_n = "<<graph_n<<" epsilon = "<<config.epsilon<<endl;
             for (int i=0; i<orderedList.size(); ++i) {
                 it = --it;
                 if((*it).type==DQUERY) {
@@ -2631,7 +2632,7 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
                     }
                     if (inacc_finish_set.find((*it).index)!=inacc_finish_set.end()) {
                         error_sum += inacc_idx_map[(*it).index][queryList.front().source];
-                        cout<<"error_sum = "<<error_sum<<"."<<endl;
+                        cout<<"error_sum = "<<error_sum<<endl;
                         if (error_sum < error_bound) {
                             continue;
                         } else {
