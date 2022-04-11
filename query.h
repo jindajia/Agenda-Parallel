@@ -2570,7 +2570,7 @@ void UpdateManager(Graph &graph, MPMCQueue<DY_worktask> &uManager_mpmc_queue, ui
                     long id = reverse_idx_um.first.occur[j];
                     double pmin=min((reverse_idx_um.first[id]+errorlimit*epsrate)*(1-config.alpha)/config.alpha,1.0);
                     inacc_idx_map[single_task.index][id]*=(1-pmin/graph.g[u].size());
-                    cout<<"j: "<<j<<" pmin: "<<pmin<<" inacc: "<<inacc_idx_map[single_task.index][id]<<endl;
+                    // cout<<"j: "<<j<<" pmin: "<<pmin<<" inacc: "<<inacc_idx_map[single_task.index][id]<<endl;
                 }
             }
             inacc_finish_set.insert(single_task.index);
@@ -2632,7 +2632,7 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
                     }
                     if (inacc_finish_set.find((*it).index)!=inacc_finish_set.end()) {
                         error_sum += inacc_idx_map[(*it).index][queryList.front().source];
-                        cout<<"error_sum = "<<error_sum<<endl;
+                        cout<<"error_sum = "<<error_sum<<" query source = "<<queryList.front().source<<" inacc = "<<inacc_idx_map[(*it).index][queryList.front().source]<<endl;
                         if (error_sum < error_bound) {
                             continue;
                         } else {
