@@ -2620,12 +2620,15 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
             error_bound = config.epsilon/graph_n*(1.0-theta);
             cout<<"error_bound = "<<error_bound<<"."<<endl;
             for (int i=0; i<orderedList.size(); ++i) {
-                it = it--;
+                it = --it;
                 if((*it).type==DQUERY) {
                     it++;
                     flag = true;
                     break;
                 } else if((*it).type==DUPDATE) {
+                    if ((*it).index>queryList.front().index){
+                        continue;
+                    }
                     if (inacc_finish_set.find((*it).index)!=inacc_finish_set.end()) {
                         error_sum += inacc_idx_map[(*it).index][queryList.front().source];
                         if (error_sum < error_bound) {
