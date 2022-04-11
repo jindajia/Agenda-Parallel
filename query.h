@@ -2607,15 +2607,28 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
             /* move orderedList tasks to main_mpmc_queue */
             int addSize = min(totalQueueSize, 5);
             std::cout<<"main_queue lower than bar, add "<<addSize<<" tasks"<<endl;
-            for (int i=0; i< addSize; ++i) {
-                if(orderedList.front().index<queryList.front().index) {
+            for (int i=0; i< addSize; ) {
+                if (!orderedList.empty()&&!queryList.empty()) {
+                    if(orderedList.front().index<queryList.front().index) {
+                        main_mpmc_queue.push(orderedList.front());
+                        orderedList.pop_front();
+                    }else {
+                        main_mpmc_queue.push(queryList.front());
+                        queryList.pop_front();
+                    }
+                    popCnt++;
+                    i++;
+                } else if (!orderedList.empty()) {
                     main_mpmc_queue.push(orderedList.front());
                     orderedList.pop_front();
-                }else {
+                    popCnt++;
+                    i++;
+                } else if (!queryList.empty()) {
                     main_mpmc_queue.push(queryList.front());
                     queryList.pop_front();
+                    popCnt++;
+                    i++;
                 }
-                popCnt++;
             }
         }
     }
