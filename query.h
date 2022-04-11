@@ -2584,52 +2584,40 @@ void UpdateManager(Graph &graph, MPMCQueue<pair<DY_worktask,bool>> &uManager_mpm
     }
 }
 
-void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask> &update_mpmc_queue, MPMCQueue<DY_worktask> &query_mpmc_queue, MPMCQueue<pair<DY_worktask,bool>> &uManager_mpmc_queue, uint64_t taskSize) {
+void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask> &uManager_mpmc_queue, uint64_t taskSize) {
+    const int min_task_num = 3;//when the num of task in main_mpmc_queue lower than that, move task from orderedQueue to main_Queue.
     int popCnt = 0;
+    vector<DY_worktask> orderedQueue;
+    orderedQueue.resize(50);
     const DY_worktask task_null = {.index = -1, .type = -1, .source = -1, .update_start=-1, .update_end=-1};
-    DY_worktask query_task = task_null;
-    DY_worktask update_task = task_null;
+    DY_worktask single_task = task_null;
     std::cout<<"TaskManager has "<<taskSize<<" tasks."<<endl;
     while(true) {
         if (popCnt>=taskSize) {
             break;
         }
-        if (query_task.index==-1) {
-            query_mpmc_queue.try_pop(query_task);
-        }
-        if (update_task.index==-1) {
-            update_mpmc_queue.try_pop(update_task);
-        }
-        if (update_task.index!=-1 || query_task.index!=-1) {
-            if (update_task.index!=-1 && query_task.index!=-1) {
-                if (query_task.index < update_task.index) {
-                    main_mpmc_queue.push(query_task);
-                    popCnt++;
-                    query_task = task_null;
-                } else {
-                    main_mpmc_queue.push(update_task);
-                    uManager_mpmc_queue.push(make_pair(update_task, true));
-                    popCnt++;
-                    update_task = task_null;
-                }
-                continue;
+        if (uManager_mpmc_queue.try_pop(single_task)) {
+            /* add task to orderedQueue */
+            if (single_task.type == DUPDATE) {
+                orderedQueue.push_back(single_task);
+            } else if (single_task.type == DQUERY) {
+                orderedQueue.push_back(single_task);
             }
-
-            if (query_task.index!=-1) {
-                main_mpmc_queue.push(query_task);
+        }
+        if (main_mpmc_queue.size() <= min_task_num && orderedQueue.size()>0) {
+            /* move orderedQueue tasks to main_mpmc_queue */
+            int addSize = min((int)orderedQueue.size(), 5);
+            std::cout<<"main_queue lower than bar, add "<<addSize<<" tasks"<<endl;
+            for (int i=0; i< addSize; ++i) {
+                main_mpmc_queue.push(orderedQueue[i]);
                 popCnt++;
-                query_task = task_null;
-            } else {
-                main_mpmc_queue.push(update_task);
-                uManager_mpmc_queue.push(make_pair(update_task, true));
-                popCnt++;
-                update_task = task_null;
             }
+            orderedQueue.clear();
         }
     }
 }
 
-void ProduceItem(MPMCQueue<DY_worktask> &update_mpmc_queue, MPMCQueue<DY_worktask> &query_mpmc_queue, double start_time, vector<int> &queries, vector<pair<int,int>> &updates, int graph_n) {
+void ProduceItem(MPMCQueue<DY_worktask> &uManager_mpmc_queue, double start_time, vector<int> &queries, vector<pair<int,int>> &updates, int graph_n) {
     response_time_start.reserve(graph_n);
     response_time_wait.reserve(graph_n);
     response_time_end.reserve(graph_n);
@@ -2644,13 +2632,13 @@ void ProduceItem(MPMCQueue<DY_worktask> &update_mpmc_queue, MPMCQueue<DY_worktas
             //push it to workspace
             if(parallel_dynamic_workload.workload[i]==DUPDATE){
                 single_task = {.index = i, .type = DUPDATE, .source = -1, .update_start=updates[update_idx].first, .update_end=updates[update_idx].second};
-                update_mpmc_queue.push(single_task);
+                uManager_mpmc_queue.push(single_task);
                 update_idx++;
             } else{
                 query_queue.push_back(queries[query_idx]);
                 response_time_start[queries[query_idx]]=current_time;
                 single_task = {.index = i, .type = DQUERY, .source = queries[query_idx] , .update_start=-1, .update_end=-1};
-                query_mpmc_queue.push(single_task);
+                uManager_mpmc_queue.push(single_task);
                 query_idx++;
             }
             i++;
@@ -2839,7 +2827,7 @@ void dynamic_ssquery_parallel(Graph& graph, Graph& graph_2,int num_total_worker)
         MPMCQueue<DY_worktask> update_mpmc_queue(queueLength);
         MPMCQueue<DY_worktask> query_mpmc_queue(queueLength);
 
-        MPMCQueue<pair<DY_worktask,bool>> uManager_mpmc_queue(queueLength);
+        MPMCQueue<DY_worktask> uManager_mpmc_queue(queueLength);
 
         std::atomic<bool> flag(false);
         std::vector<std::thread> threads;
@@ -2848,21 +2836,21 @@ void dynamic_ssquery_parallel(Graph& graph, Graph& graph_2,int num_total_worker)
         threads.push_back(std::thread([&, i] {
             while (!flag)
             ;
-            ProduceItem(update_mpmc_queue, query_mpmc_queue, OMP_check_total_time_start, queries, updates, graph.n);
+            ProduceItem(uManager_mpmc_queue, OMP_check_total_time_start, queries, updates, graph.n);
 
         }));
         uint64_t i_2 = i + numProducerThreds;
         threads.push_back(std::thread([&, i_2] {
             while (!flag)
             ;
-            TaskManager(main_mpmc_queue, update_mpmc_queue, query_mpmc_queue, uManager_mpmc_queue, numOps);
+            TaskManager(main_mpmc_queue, uManager_mpmc_queue, numOps);
         }));
-        uint64_t i_3 = i*2 + numProducerThreds;
-        threads.push_back(std::thread([&, i_3] {
-            while (!flag)
-            ;
-            UpdateManager(graph_2, uManager_mpmc_queue, config.update_size);
-        }));
+        // uint64_t i_3 = i*2 + numProducerThreds;
+        // threads.push_back(std::thread([&, i_3] {
+        //     while (!flag)
+        //     ;
+        //     UpdateManager(graph_2, uManager_mpmc_queue, config.update_size);
+        // }));
         }
 
         //Consumer
