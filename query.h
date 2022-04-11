@@ -2570,10 +2570,6 @@ void UpdateManager(Graph &graph, MPMCQueue<DY_worktask> &uManager_mpmc_queue, ui
                     long id = reverse_idx_um.first.occur[j];
                     double pmin=min((reverse_idx_um.first[id]+errorlimit*epsrate)*(1-config.alpha)/config.alpha,1.0);
                     inacc_idx_map[single_task.index][id]*=(1-pmin/graph.g[u].size());
-                    if(inacc_idx_map[single_task.index][id]==1){
-                        cout<<"source: "<<id<<" inacc = 1"<<endl;
-                    }
-                    // cout<<"j: "<<j<<" pmin: "<<pmin<<" inacc: "<<inacc_idx_map[single_task.index][id]<<endl;
                 }
             }
             inacc_finish_set.insert(single_task.index);
@@ -2586,6 +2582,7 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
     const int min_task_num = 3;//when the num of task in main_mpmc_queue lower than that, move task from orderedList to main_Queue.
     int popCnt = 0;
     int totalQueueSize = 0;
+    long id;
     bool flag;
     double theta = 0.8;
     double error_sum;
@@ -2634,8 +2631,9 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
                         continue;
                     }
                     if (inacc_finish_set.find((*it).index)!=inacc_finish_set.end()) {
-                        error_sum += (1 - inacc_idx_map[(*it).index][queryList.front().source]);
-                        cout<<"error_sum = "<<error_sum<<" query source = "<<queryList.front().source<<" inacc = "<<inacc_idx_map[(*it).index][queryList.front().source]<<endl;
+                        id = reverse_idx_um.first.occur[queryList.front().source];
+                        error_sum += (1 - inacc_idx_map[(*it).index][id]);
+                        cout<<"error_sum = "<<error_sum<<" query source = "<<queryList.front().source<<" inacc = "<<inacc_idx_map[(*it).index][id]<<endl;
                         if (error_sum < error_bound) {
                             if (it==orderedList.begin()) {
                                 flag = true;
