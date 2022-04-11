@@ -2533,17 +2533,19 @@ void generate_parallel_dynamic_workload_workspace(bool if_hybrid=false){
 }
 //-------------------------------------------------------------------------------------------------------------------------------------------------
 
-void UpdateManager(Graph &graph, MPMCQueue<DY_worktask> &uManager_mpmc_queue, uint64_t updateSize) {
-    std::cout<<"UpdateManager has "<<updateSize<<" updates."<<endl;
+void UpdateManager(Graph &graph, MPMCQueue<DY_worktask> &uManager_mpmc_queue, uint64_t taskSize) {
+    std::cout<<"UpdateManager has "<<taskSize<<" updates."<<endl;
     int popCnt = 0;
-    DY_worktask update_task;
+    DY_worktask single_task;
     int u,v;
     while(true) {
-        if (popCnt>=updateSize) {
+        if (popCnt>=taskSize) {
             break;
         }
-        uManager_mpmc_queue.pop(update_task);
-        if (update_task.type!=DUPDATE) {
+        uManager_mpmc_queue.pop(single_task);
+        if (single_task.type==DQUERY) {
+            query_graph_n_map[single_task.source] = graph.n;
+            popCnt++;
             continue;
         }
         double errorlimit=double(std::max(1,(int)(graph.g[u].size())))/graph.n;
@@ -2561,16 +2563,16 @@ void UpdateManager(Graph &graph, MPMCQueue<DY_worktask> &uManager_mpmc_queue, ui
             graph.g[u].push_back(v);
             graph.gr[v].push_back(u);
 
-            inacc_idx_map[update_task.index].resize(graph.n);
-            inacc_idx_map[update_task.index].assign(graph.n, 1);
+            inacc_idx_map[single_task.index].resize(graph.n);
+            inacc_idx_map[single_task.index].assign(graph.n, 1);
             {   
                 for(long j=0; j<reverse_idx_um.first.occur.m_num; j++){
                     long id = reverse_idx_um.first.occur[j];
                     double pmin=min((reverse_idx_um.first[id]+errorlimit*epsrate)*(1-config.alpha)/config.alpha,1.0);
-                    inacc_idx_map[update_task.index][id]*=(1-pmin/graph.g[u].size());
+                    inacc_idx_map[single_task.index][id]*=(1-pmin/graph.g[u].size());
                 }
             }
-            inacc_finish_set.insert(update_task.index);
+            inacc_finish_set.insert(single_task.index);
         }
         popCnt++;
     }
@@ -2580,8 +2582,14 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
     const int min_task_num = 3;//when the num of task in main_mpmc_queue lower than that, move task from orderedList to main_Queue.
     int popCnt = 0;
     int totalQueueSize = 0;
+    bool flag;
+    double theta = 0.8;
+    double error_sum;
+    double error_bound;
+    int graph_n;
     list<DY_worktask> orderedList;
     list<DY_worktask> queryList;
+    list<DY_worktask>::iterator it;
     const DY_worktask task_null = {.index = -1, .type = -1, .source = -1, .update_start=-1, .update_end=-1};
     DY_worktask single_task = task_null;
     std::cout<<"TaskManager has "<<taskSize<<" tasks."<<endl;
@@ -2602,6 +2610,45 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
             }
             single_task = task_null;
         }
+
+        /* insert query task to orderedqueue start*/
+        if (queryList.size()>0) {
+            it = orderedList.end();
+            flag = false;
+            graph_n = query_graph_n_map[queryList.front().index];
+            error_sum = 0;
+            error_bound = config.epsilon/graph_n*(1.0-theta);
+            cout<<"error_bound = "<<error_bound<<"."<<endl;
+            for (int i=0; i<orderedList.size(); ++i) {
+                it = it--;
+                if((*it).type==DQUERY) {
+                    it++;
+                    flag = true;
+                    break;
+                } else if((*it).type==DUPDATE) {
+                    if (inacc_finish_set.find((*it).index)!=inacc_finish_set.end()) {
+                        error_sum += inacc_idx_map[(*it).index][queryList.front().source];
+                        if (error_sum < error_bound) {
+                            continue;
+                        } else {
+                            it++;
+                            flag = true;
+                            break;
+                        }
+                    } else {
+                        flag = false;
+                        break;
+                    }
+                }
+            }
+            if (flag) {
+                orderedList.insert(it, queryList.front());
+                queryList.pop_front();
+            }
+        }
+
+        /* insert query task to orderedqueue end*/
+
         totalQueueSize = orderedList.size() + queryList.size();
         if (main_mpmc_queue.size() <= min_task_num && totalQueueSize>0) {
             /* move orderedList tasks to main_mpmc_queue */
@@ -2866,7 +2913,7 @@ void dynamic_ssquery_parallel(Graph& graph, Graph& graph_2,int num_total_worker)
         threads.push_back(std::thread([&, i_3] {
             while (!flag)
             ;
-            UpdateManager(graph_2, uManager_mpmc_queue, config.update_size);
+            UpdateManager(graph_2, uManager_mpmc_queue, numOps);
         }));
         }
 

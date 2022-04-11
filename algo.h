@@ -48,6 +48,8 @@ vector<double> response_time_wait;
 vector<double> response_time_end;
 
 map<int, vector<double>> inacc_idx_map;
+map<int, int> query_graph_n_map;
+
 set<int> inacc_finish_set;
 ReversePushidx reverse_idx_um;
 
