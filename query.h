@@ -2577,7 +2577,7 @@ void UpdateManager(Graph &graph, MPMCQueue<DY_worktask> &uManager_mpmc_queue, ui
     }
 }
 
-void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask> &tManager_mpmc_queue, uint64_t taskSize) {
+void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask> &tManager_mpmc_queue, uint64_t taskSize, long graph_n) {
     const int min_task_num = 3;//when the num of task in main_mpmc_queue lower than that, move task from orderedList to main_Queue.
     int popCnt = 0;
     int totalQueueSize = 0;
@@ -2586,7 +2586,6 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
     double theta = 0.8;
     double error_sum;
     double error_bound;
-    long graph_n = config.graph_n;
     list<DY_worktask> orderedList;
     list<DY_worktask> queryList;
     list<DY_worktask>::iterator it;
@@ -2914,7 +2913,7 @@ void dynamic_ssquery_parallel(Graph& graph, Graph& graph_2,int num_total_worker)
         threads.push_back(std::thread([&, i_2] {
             while (!flag)
             ;
-            TaskManager(main_mpmc_queue, tManager_mpmc_queue, numOps);
+            TaskManager(main_mpmc_queue, tManager_mpmc_queue, numOps, graph.n);
         }));
         uint64_t i_3 = i*2 + numProducerThreds;
         threads.push_back(std::thread([&, i_3] {
