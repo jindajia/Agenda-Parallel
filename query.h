@@ -2533,62 +2533,54 @@ void generate_parallel_dynamic_workload_workspace(bool if_hybrid=false){
 }
 //-------------------------------------------------------------------------------------------------------------------------------------------------
 
-void UpdateManager(Graph &graph, MPMCQueue<pair<DY_worktask,bool>> &uManager_mpmc_queue, uint64_t updateSize) {
+void UpdateManager(Graph &graph, MPMCQueue<DY_worktask> &uManager_mpmc_queue, uint64_t updateSize) {
     std::cout<<"UpdateManager has "<<updateSize<<" updates."<<endl;
     int popCnt = 0;
-    pair<DY_worktask,bool> update_task;
+    DY_worktask update_task;
     int u,v;
     while(true) {
         if (popCnt>=updateSize) {
             break;
         }
         uManager_mpmc_queue.pop(update_task);
-        if (update_task.first.type!=DUPDATE) {
+        if (update_task.type!=DUPDATE) {
             continue;
         }
-        if (update_task.second==true) {
-            double errorlimit=double(std::max(1,(int)(graph.g[u].size())))/graph.n;
-            double epsrate=0.5;
-            if(config.graph_alias=="webstanford"){
-                errorlimit=double(std::max(1,(int)(graph.g[u].size())))/graph.n*10;
+        double errorlimit=double(std::max(1,(int)(graph.g[u].size())))/graph.n;
+        double epsrate=0.5;
+        if(config.graph_alias=="webstanford"){
+            errorlimit=double(std::max(1,(int)(graph.g[u].size())))/graph.n*10;
+        }
+        if(errorlimit!=0){			
+            {
+                reverse_push(reverse_idx_um, u, graph, errorlimit*epsrate, 1);
             }
-            if(errorlimit!=0){			
-                {
-                    reverse_push(reverse_idx_um, u, graph, errorlimit*epsrate, 1);
-                }
 
-                int count=0;
-                graph.m++;
-                graph.g[u].push_back(v);
-                graph.gr[v].push_back(u);
-
-                inacc_idx_map[update_task.first.index].resize(graph.n);
-                inacc_idx_map[update_task.first.index].assign(graph.n, 1);
-                {   
-                    for(long j=0; j<reverse_idx_um.first.occur.m_num; j++){
-                        long id = reverse_idx_um.first.occur[j];
-                        double pmin=min((reverse_idx_um.first[id]+errorlimit*epsrate)*(1-config.alpha)/config.alpha,1.0);
-                        inacc_idx_map[update_task.first.index][id]*=(1-pmin/graph.g[u].size());
-                    }
-                }
-                inacc_finish_set.insert(update_task.first.index);
-            }
-        } else {
-            u=update_task.first.update_start;
-            v=update_task.first.update_end;
+            int count=0;
             graph.m++;
             graph.g[u].push_back(v);
             graph.gr[v].push_back(u);
+
+            inacc_idx_map[update_task.index].resize(graph.n);
+            inacc_idx_map[update_task.index].assign(graph.n, 1);
+            {   
+                for(long j=0; j<reverse_idx_um.first.occur.m_num; j++){
+                    long id = reverse_idx_um.first.occur[j];
+                    double pmin=min((reverse_idx_um.first[id]+errorlimit*epsrate)*(1-config.alpha)/config.alpha,1.0);
+                    inacc_idx_map[update_task.index][id]*=(1-pmin/graph.g[u].size());
+                }
+            }
+            inacc_finish_set.insert(update_task.index);
         }
         popCnt++;
     }
 }
 
-void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask> &uManager_mpmc_queue, uint64_t taskSize) {
+void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask> &tManager_mpmc_queue, uint64_t taskSize) {
     const int min_task_num = 3;//when the num of task in main_mpmc_queue lower than that, move task from orderedQueue to main_Queue.
     int popCnt = 0;
     vector<DY_worktask> orderedQueue;
-    orderedQueue.resize(50);
+    orderedQueue.reserve(50);
     const DY_worktask task_null = {.index = -1, .type = -1, .source = -1, .update_start=-1, .update_end=-1};
     DY_worktask single_task = task_null;
     std::cout<<"TaskManager has "<<taskSize<<" tasks."<<endl;
@@ -2596,13 +2588,14 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
         if (popCnt>=taskSize) {
             break;
         }
-        if (uManager_mpmc_queue.try_pop(single_task)) {
+        if (tManager_mpmc_queue.try_pop(single_task)) {
             /* add task to orderedQueue */
             if (single_task.type == DUPDATE) {
                 orderedQueue.push_back(single_task);
             } else if (single_task.type == DQUERY) {
                 orderedQueue.push_back(single_task);
             }
+            single_task = task_null;
         }
         if (main_mpmc_queue.size() <= min_task_num && orderedQueue.size()>0) {
             /* move orderedQueue tasks to main_mpmc_queue */
@@ -2617,7 +2610,7 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
     }
 }
 
-void ProduceItem(MPMCQueue<DY_worktask> &uManager_mpmc_queue, double start_time, vector<int> &queries, vector<pair<int,int>> &updates, int graph_n) {
+void ProduceItem(MPMCQueue<DY_worktask> &tManager_mpmc_queue, MPMCQueue<DY_worktask> &uManager_mpmc_queue, double start_time, vector<int> &queries, vector<pair<int,int>> &updates, int graph_n) {
     response_time_start.reserve(graph_n);
     response_time_wait.reserve(graph_n);
     response_time_end.reserve(graph_n);
@@ -2633,12 +2626,14 @@ void ProduceItem(MPMCQueue<DY_worktask> &uManager_mpmc_queue, double start_time,
             if(parallel_dynamic_workload.workload[i]==DUPDATE){
                 single_task = {.index = i, .type = DUPDATE, .source = -1, .update_start=updates[update_idx].first, .update_end=updates[update_idx].second};
                 uManager_mpmc_queue.push(single_task);
+                tManager_mpmc_queue.push(single_task);
                 update_idx++;
             } else{
                 query_queue.push_back(queries[query_idx]);
                 response_time_start[queries[query_idx]]=current_time;
                 single_task = {.index = i, .type = DQUERY, .source = queries[query_idx] , .update_start=-1, .update_end=-1};
                 uManager_mpmc_queue.push(single_task);
+                tManager_mpmc_queue.push(single_task);
                 query_idx++;
             }
             i++;
@@ -2824,9 +2819,7 @@ void dynamic_ssquery_parallel(Graph& graph, Graph& graph_2,int num_total_worker)
         uint64_t readCnt = 0;
         uint64_t popCnt = 0;
         MPMCQueue<DY_worktask> main_mpmc_queue(queueLength);
-        MPMCQueue<DY_worktask> update_mpmc_queue(queueLength);
-        MPMCQueue<DY_worktask> query_mpmc_queue(queueLength);
-
+        MPMCQueue<DY_worktask> tManager_mpmc_queue(queueLength);
         MPMCQueue<DY_worktask> uManager_mpmc_queue(queueLength);
 
         std::atomic<bool> flag(false);
@@ -2836,21 +2829,21 @@ void dynamic_ssquery_parallel(Graph& graph, Graph& graph_2,int num_total_worker)
         threads.push_back(std::thread([&, i] {
             while (!flag)
             ;
-            ProduceItem(uManager_mpmc_queue, OMP_check_total_time_start, queries, updates, graph.n);
+            ProduceItem(tManager_mpmc_queue, uManager_mpmc_queue, OMP_check_total_time_start, queries, updates, graph.n);
 
         }));
         uint64_t i_2 = i + numProducerThreds;
         threads.push_back(std::thread([&, i_2] {
             while (!flag)
             ;
-            TaskManager(main_mpmc_queue, uManager_mpmc_queue, numOps);
+            TaskManager(main_mpmc_queue, tManager_mpmc_queue, numOps);
         }));
-        // uint64_t i_3 = i*2 + numProducerThreds;
-        // threads.push_back(std::thread([&, i_3] {
-        //     while (!flag)
-        //     ;
-        //     UpdateManager(graph_2, uManager_mpmc_queue, config.update_size);
-        // }));
+        uint64_t i_3 = i*2 + numProducerThreds;
+        threads.push_back(std::thread([&, i_3] {
+            while (!flag)
+            ;
+            UpdateManager(graph_2, uManager_mpmc_queue, config.update_size);
+        }));
         }
 
         //Consumer
