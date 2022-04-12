@@ -2544,7 +2544,6 @@ void UpdateManager(Graph &graph, MPMCQueue<DY_worktask> &uManager_mpmc_queue, ui
         }
         uManager_mpmc_queue.pop(single_task);
         if (single_task.type==DQUERY) {
-            query_graph_n_map[single_task.index] = graph.n;
             popCnt++;
             continue;
         }
@@ -2578,15 +2577,15 @@ void UpdateManager(Graph &graph, MPMCQueue<DY_worktask> &uManager_mpmc_queue, ui
     }
 }
 
-void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask> &tManager_mpmc_queue, uint64_t taskSize) {
+void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask> &tManager_mpmc_queue, uint64_t taskSize, long graph_n) {
     const int min_task_num = 3;//when the num of task in main_mpmc_queue lower than that, move task from orderedList to main_Queue.
     int popCnt = 0;
     int totalQueueSize = 0;
+    long id;
     bool flag;
     double theta = 0.8;
     double error_sum;
     double error_bound;
-    int graph_n;
     list<DY_worktask> orderedList;
     list<DY_worktask> queryList;
     list<DY_worktask>::iterator it;
@@ -2612,28 +2611,32 @@ void TaskManager(MPMCQueue<DY_worktask> &main_mpmc_queue, MPMCQueue<DY_worktask>
         }
 
         /* insert query task to orderedqueue start*/
-        if (queryList.size()>0 && query_graph_n_map.find(queryList.front().index)!=query_graph_n_map.end()) {
+        if (queryList.size()>0) {
             it = orderedList.end();
             flag = false;
-            graph_n = query_graph_n_map[queryList.front().index];
             error_sum = 0;
             error_bound = config.epsilon/graph_n*(1.0-theta);
-            cout<<"error_bound = "<<error_bound<<"."<<endl;
             for (int i=0; i<orderedList.size(); ++i) {
-                it = --it;
+                it--;
+                if ((*it).index>queryList.front().index){
+                    continue;
+                }
                 if((*it).type==DQUERY) {
                     it++;
                     flag = true;
                     break;
                 } else if((*it).type==DUPDATE) {
-                    if ((*it).index>queryList.front().index){
-                        continue;
-                    }
                     if (inacc_finish_set.find((*it).index)!=inacc_finish_set.end()) {
-                        error_sum += inacc_idx_map[(*it).index][queryList.front().source];
-                        cout<<"error_sum = "<<error_sum<<"."<<endl;
+                        id = reverse_idx_um.first.occur[queryList.front().source];
+                        error_sum += (1 - inacc_idx_map[(*it).index][id]);
+                        cout<<"error_sum = "<<error_sum<<" query source = "<<queryList.front().source<<" inacc = "<<inacc_idx_map[(*it).index][id]<<endl;
                         if (error_sum < error_bound) {
-                            continue;
+                            if (it==orderedList.begin()) {
+                                flag = true;
+                                break;
+                            } else{
+                                continue;
+                            }
                         } else {
                             it++;
                             flag = true;
@@ -2740,14 +2743,12 @@ void ConsumeItem(Graph& graph, int thread_idx, int head, const DY_worktask &sing
     if(single_task.type==DUPDATE) {
         //write mutex
         int u,v;
-        cout<< "UPDATE"<<endl;	
         u=single_task.update_start;
         v=single_task.update_end;
         map<int, vector<double>>::iterator it_map;
         set<int>::iterator it_set = inacc_finish_set.find(single_task.index);
         vector<double> temp_inacc_idx;
         if(it_set!=inacc_finish_set.end()){
-            cout<<"Index inaccuracy already exist"<<endl;
             graph.m++;
             graph.g[u].push_back(v);
             graph.gr[v].push_back(u);
@@ -2911,7 +2912,7 @@ void dynamic_ssquery_parallel(Graph& graph, Graph& graph_2,int num_total_worker)
         threads.push_back(std::thread([&, i_2] {
             while (!flag)
             ;
-            TaskManager(main_mpmc_queue, tManager_mpmc_queue, numOps);
+            TaskManager(main_mpmc_queue, tManager_mpmc_queue, numOps, graph.n);
         }));
         uint64_t i_3 = i*2 + numProducerThreds;
         threads.push_back(std::thread([&, i_3] {
@@ -2954,7 +2955,7 @@ void dynamic_ssquery_parallel(Graph& graph, Graph& graph_2,int num_total_worker)
                 }else {
                     task_type = "UPDATE";
                 }
-                std::cout << "Consumer thread " << i<<": "<< std::this_thread::get_id()<< " is consuming the " << temp_pop_cnt << "^th item doing " << task_type <<"." << std::endl;
+                cout << "Consumer thread " << i<<": "<< this_thread::get_id()<< " is consuming the " << single_task.index << "^th task doing " << task_type <<"." << endl;
                 ConsumeItem(graph, i, temp_pop_cnt, single_task, OMP_check_total_time_start, i, numConsumers);
                 if(single_task.type == DQUERY){
                     read_mtx.lock();

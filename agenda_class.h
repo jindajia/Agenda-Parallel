@@ -154,7 +154,7 @@ public:
 	    sort(error_idx.begin(), error_idx.end(), err_cmp);
 	    long i=0;
 	    double errbound=config.epsilon/graph.n*(1-theta);
-	
+        cout<<"agenda_class errbound = "<<errbound<<endl;
 
 	
 	    while(errsum>errbound){
